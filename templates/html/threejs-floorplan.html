@@ -398,6 +398,9 @@ window.ARCHVIZ_HYGIENE = ARCHVIZ_HYGIENE;
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { animate } from 'animejs';
+// Expose THREE globally for contract module
+window.THREE = THREE;
+window.OrbitControls = OrbitControls;
 
 // animejs v4 helper
 function tween(target, props) { return animate(target, props); }
