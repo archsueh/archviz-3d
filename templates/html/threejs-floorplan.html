@@ -1,5 +1,5 @@
 <!--
-<!-- archviz-skills upgrade Phase 1 | 2026-06-13 -->
+<!-- archviz-skills upgrade Phase 3 | 2026-06-13 -->
   Three.js Floor Plan Visualization (archviz-skills)
   Use for: floor plan extrusion, multi-floor navigation, room layout
   Stack: Three.js (CDN) + animejs (CDN) + OrbitControls
@@ -152,6 +152,7 @@
   <button class="btn active" onclick="goFloor(0)">1F · 门厅</button>
   <button class="btn" onclick="showAll()">全部楼层</button>
   <button class="btn" onclick="toggleExplode()">分解</button>
+  <button class="btn" onclick="toggleWireframe()">线框</button>
   <button class="btn" onclick="window.archvizTheme?.toggleTheme()">🎨 主题</button>
 </div>
 <div id="floor-label">1F</div>
@@ -170,6 +171,229 @@
   }
 }
 </script>
+
+<!-- archviz-skills Phase 3 | 2026-06-13 -->
+<!-- ArchVizBuild Contract + Engineering Hygiene Module -->
+<!-- Include BEFORE the main 3D scene script in any Three.js template -->
+<!-- Provides: ArchVizBuild contract, dispose guard, frustum culling, explode lerp, thumbnail -->
+
+<script>
+/**
+ * ArchVizBuild Contract v1.0
+ * 
+ * Every 3D template MUST implement this interface:
+ *   { root, parts[], update(t, mode), dispose() }
+ * 
+ * Whitebox:
+ * - root: THREE.Group — the top-level group added to scene
+ * - parts: Array<{name, group, explodeVec}> — each explodable component
+ * - update(t, mode): called each frame, t=0..1 progress, mode='normal'|'explode'|'wireframe'
+ * - dispose(): MUST clean up all GPU resources (geometry, materials, textures, render targets)
+ */
+
+// === Engineering Hygiene Constants ===
+const ARCHVIZ_HYGIENE = {
+  DPR_CAP: 2,                    // Max device pixel ratio
+  MAX_LIGHTS: 3,                 // Max light count
+  SHADOW_MAP_SIZE: 1024,         // Shadow resolution (not 2048 — perf balance)
+  FRUSTUM_CULLING: true,         // Auto-enable on all meshes
+  CONTACT_SHADOW_SIZE: 512,      // ContactShadow resolution
+};
+
+// === ArchVizBuild Base Class ===
+class ArchVizBuild {
+  constructor() {
+    this.root = new THREE.Group();
+    this.parts = [];
+    this._disposed = false;
+    this._exploders = new Map(); // name → {vec, originalPos}
+  }
+
+  /**
+   * Register a part for explode view
+   * @param {string} name - Part identifier
+   * @param {THREE.Group} group - The 3D group
+   * @param {THREE.Vector3} explodeVec - Direction/magnitude for explode
+   */
+  addPart(name, group, explodeVec) {
+    const part = { name, group, explodeVec: explodeVec.clone() };
+    this.parts.push(part);
+    this._exploders.set(name, {
+      vec: explodeVec.clone(),
+      originalPos: group.position.clone()
+    });
+    this.root.add(group);
+  }
+
+  /**
+   * Update loop — override in subclass
+   * @param {number} t - Progress 0..1
+   * @param {'normal'|'explode'|'wireframe'} mode
+   */
+  update(t, mode) {
+    if (this._disposed) return;
+    
+    if (mode === 'explode') {
+      this._updateExplode(t);
+    } else if (mode === 'normal') {
+      this._updateExplode(0); // collapse
+    }
+  }
+
+  /**
+   * Baked vector lerp explode — smooth, no per-frame animejs
+   * @private
+   */
+  _updateExplode(t) {
+    this.parts.forEach(part => {
+      const data = this._exploders.get(part.name);
+      if (!data) return;
+      // Smooth easing
+      const eased = t * t * (3 - 2 * t); // smoothstep
+      part.group.position.lerpVectors(
+        data.originalPos,
+        data.originalPos.clone().add(data.vec),
+        eased
+      );
+    });
+  }
+
+  /**
+   * Toggle wireframe on all meshes
+   * @param {boolean} on
+   */
+  setWireframe(on) {
+    this.root.traverse(child => {
+      if (child.isMesh) {
+        child.material.wireframe = on;
+      }
+    });
+  }
+
+  /**
+   * Dispose ALL GPU resources — MUST call when switching views or destroying
+   * Whitebox: traverses scene graph, disposes geometry + material + texture
+   */
+  dispose() {
+    if (this._disposed) return;
+    this._disposed = true;
+
+    this.root.traverse(child => {
+      if (child.isMesh) {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach(m => {
+              if (m.map) m.map.dispose();
+              if (m.normalMap) m.normalMap.dispose();
+              if (m.aoMap) m.aoMap.dispose();
+              m.dispose();
+            });
+          } else {
+            if (child.material.map) child.material.map.dispose();
+            if (child.material.normalMap) child.material.normalMap.dispose();
+            if (child.material.aoMap) child.material.aoMap.dispose();
+            child.material.dispose();
+          }
+        }
+      }
+      if (child.isLight && child.shadow) {
+        if (child.shadow.map) child.shadow.map.dispose();
+      }
+    });
+
+    // Remove from parent
+    if (this.root.parent) this.root.parent.remove(this.root);
+  }
+
+  /**
+   * Generate offscreen thumbnail
+   * @param {THREE.WebGLRenderer} renderer
+   * @param {THREE.Camera} camera
+   * @param {number} size - Thumbnail dimension in px
+   * @returns {string} data URL
+   */
+  thumbnail(renderer, camera, size) {
+    size = size || 128;
+    const tmpCanvas = document.createElement('canvas');
+    tmpCanvas.width = size;
+    tmpCanvas.height = size;
+    const tmpRenderer = new THREE.WebGLRenderer({ canvas: tmpCanvas, antialias: false });
+    tmpRenderer.setSize(size, size);
+    tmpRenderer.setClearColor(0xf5f0eb);
+
+    // Clone camera for thumbnail
+    const thumbCam = camera.clone();
+    thumbCam.aspect = 1;
+    thumbCam.updateProjectionMatrix();
+
+    tmpRenderer.render(this.root.children.length > 0 ? this.root : new THREE.Scene(), thumbCam);
+    const dataURL = tmpCanvas.toDataURL('image/png');
+    tmpRenderer.dispose();
+    return dataURL;
+  }
+}
+
+// === Renderer Factory (enforces hygiene) ===
+function createArchVizRenderer(canvas) {
+  const renderer = new THREE.WebGLRenderer({
+    canvas: canvas,
+    antialias: true,
+    powerPreference: 'high-performance'
+  });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, ARCHVIZ_HYGIENE.DPR_CAP));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  renderer.info.autoReset = false; // For perf monitoring
+  return renderer;
+}
+
+// === Scene Factory (enforces light cap) ===
+function createArchVizScene(bgColor) {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(bgColor || 0xf5f5f4);
+
+  // Auto frustum culling on add
+  scene.onBeforeRender = () => {
+    scene.traverse(child => {
+      if (child.isMesh) child.frustumCulled = ARCHVIZ_HYGIENE.FRUSTUM_CULLING;
+    });
+  };
+
+  return scene;
+}
+
+// === Light Helpers (enforce cap) ===
+function addLight(scene, light) {
+  let lightCount = 0;
+  scene.traverse(c => { if (c.isLight) lightCount++; });
+  if (lightCount >= ARCHVIZ_HYGIENE.MAX_LIGHTS) {
+    console.warn(`archviz-3d: light cap (${ARCHVIZ_HYGIENE.MAX_LIGHTS}) reached, skipping additional light`);
+    return;
+  }
+  if (light.shadow) {
+    light.shadow.mapSize.width = ARCHVIZ_HYGIENE.SHADOW_MAP_SIZE;
+    light.shadow.mapSize.height = ARCHVIZ_HYGIENE.SHADOW_MAP_SIZE;
+  }
+  scene.add(light);
+}
+
+// === Dispose Guard (window unload) ===
+window.addEventListener('beforeunload', () => {
+  if (window._archvizBuild) window._archvizBuild.dispose();
+});
+
+// Expose globally
+window.ArchVizBuild = ArchVizBuild;
+window.createArchVizRenderer = createArchVizRenderer;
+window.createArchVizScene = createArchVizScene;
+window.addLight = addLight;
+window.ARCHVIZ_HYGIENE = ARCHVIZ_HYGIENE;
+</script>
+
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -189,15 +413,9 @@ const TOKENS = {
   ground:  0xd6d3d1,
 };
 
-// === Scene ===
-const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(TOKENS.ambient);
+// === Scene setup (ArchVizBuild contract) ===
+const renderer = createArchVizRenderer(document.getElementById('canvas'));
+const scene = createArchVizScene(TOKENS.ambient);
 
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(20, 18, 20);
@@ -210,14 +428,18 @@ controls.maxDistance = 60;
 controls.maxPolarAngle = Math.PI / 2 + 0.1;
 controls.target.set(0, 4, 0);
 
-// === Lights ===
-scene.add(new THREE.HemisphereLight(TOKENS.ambient, TOKENS.ground, 0.7));
+// === Lights (max 3, via addLight) ===
+const hemiLight = new THREE.HemisphereLight(TOKENS.ambient, TOKENS.ground, 0.7);
+addLight(scene, hemiLight);
+
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
 dirLight.position.set(15, 20, 10);
 dirLight.castShadow = true;
 dirLight.shadow.mapSize.set(1024, 1024);
-scene.add(dirLight);
-scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+addLight(scene, dirLight);
+
+const ambLight = new THREE.AmbientLight(0xffffff, 0.2);
+addLight(scene, ambLight);
 
 // === Floor data (procedural rooms) ===
 const FLOOR_H = 3.2;
@@ -266,6 +488,11 @@ const floorPlans = [
     ]
   },
 ];
+
+// === ArchVizBuild instance ===
+const build = new ArchVizBuild();
+window._archvizBuild = build;
+scene.add(build.root);
 
 // === Build floors ===
 const allFloorGroups = [];
@@ -326,7 +553,8 @@ floorPlans.forEach((plan, fi) => {
     group.add(roomGroup);
   });
 
-  scene.add(group);
+  // Register as ArchVizBuild part (explode upward proportional to floor index)
+  build.addPart('floor-' + fi, group, new THREE.Vector3(0, fi * FLOOR_H * 0.8, 0));
   allFloorGroups.push(group);
 });
 
@@ -372,6 +600,7 @@ scene.add(new THREE.GridHelper(40, 40, 0xa8a29e, 0xd6d3d1));
 // === Floor navigation ===
 let currentFloor = 0;
 let exploded = false;
+let wireframeOn = false;
 
 function updateFloorLabel(text) {
   const el = document.getElementById('floor-label');
@@ -435,14 +664,25 @@ window.showAll = function() {
   updateFloorLabel('ALL');
 };
 
+// === Explode view (via ArchVizBuild contract — baked vector lerp) ===
 window.toggleExplode = function() {
   exploded = !exploded;
-  allFloorGroups.forEach((g, i) => {
-    const targetY = exploded ? i * (FLOOR_H * 1.8) : i * FLOOR_H;
-    tween(g.position, { y: targetY,
-      duration: 800,
-      easing: 'easeInOutCubic', });
-  });
+  const startT = performance.now();
+  const duration = 800;
+  function anim() {
+    const elapsed = performance.now() - startT;
+    const t = Math.min(elapsed / duration, 1);
+    const progress = exploded ? t : 1 - t;
+    build.update(progress, 'explode');
+    if (t < 1) requestAnimationFrame(anim);
+  }
+  anim();
+};
+
+// === Wireframe toggle (via ArchVizBuild contract) ===
+window.toggleWireframe = function() {
+  wireframeOn = !wireframeOn;
+  build.setWireframe(wireframeOn);
 };
 
 // === Responsive ===
@@ -516,8 +756,8 @@ renderLoop();
   function toast(msg){let el=document.getElementById('archviz-export-toast');if(!el){el=document.createElement('div');el.id='archviz-export-toast';document.body.appendChild(el);}el.textContent=msg;el.style.display='block';clearTimeout(el._t);el._t=setTimeout(()=>el.style.display='none',2200);}
   function findTarget(selector){if(selector)return document.querySelector(selector);return document.querySelector('.archviz-export-target')||document.querySelector('svg')||document.querySelector('canvas')||document.querySelector('article,.card,.canvas');}
   function canvasToBlob(canvasEl,scale,format){return new Promise((resolve,reject)=>{const tmpCanvas=document.createElement('canvas');tmpCanvas.width=canvasEl.width*scale;tmpCanvas.height=canvasEl.height*scale;const ctx=tmpCanvas.getContext('2d');ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(canvasEl,0,0,tmpCanvas.width,tmpCanvas.height);tmpCanvas.toBlob(blob=>blob?resolve(blob):reject(new Error('toBlob failed')),format||'image/png');});}
-  function svgToBlob(svgEl,scale,format){return new Promise((resolve,reject)=>{const vb=svgEl.viewBox?.baseVal;const w=vb?.width||svgEl.clientWidth||800;const h=vb?.height||svgEl.clientHeight||600;const clone=svgEl.cloneNode(true);const computed=getComputedStyle(document.documentElement);const vars=['--av-surface','--av-surface-alt','--av-text-primary','--av-text-secondary','--av-text-tertiary','--av-border','--av-accent','--av-chart-1','--av-chart-2','--av-chart-3','--av-chart-4','--av-chart-5','--av-chart-6'];let varCSS=':root{';vars.forEach(v=>{varCSS+=v+':'+computed.getPropertyValue(v).trim()+';';});varCSS+='}';let styleEl=clone.querySelector('style');if(!styleEl){styleEl=document.createElementNS('http://www.w3.org/2000/svg','style');clone.insertBefore(styleEl,clone.firstChild);}styleEl.textContent=varCSS+styleEl.textContent;clone.setAttribute('width',w*scale);clone.setAttribute('height',h*scale);if(!clone.getAttribute('viewBox'))clone.setAttribute('viewBox',`0 0 ${w} ${h}`);const svgStr=new XMLSerializer().serializeToString(clone);const svgBlob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});const url=URL.createObjectURL(svgBlob);const img=new Image();img.onload=()=>{const canvas=document.createElement('canvas');canvas.width=w*scale;canvas.height=h*scale;const ctx=canvas.getContext('2d');ctx.fillStyle=computed.getPropertyValue('--av-surface').trim()||'#f5f0eb';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0);URL.revokeObjectURL(url);canvas.toBlob(blob=>{if(blob)resolve(blob);else reject(new Error('toBlob failed'));},format||'image/png');};img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('SVG load failed'));};img.src=url;});}
-  async function exportBlob(target,scale,format){scale=scale||SCALE_DEFAULT;if(target.tagName==='SVG')return svgToBlob(target,scale,format);else if(target.tagName==='CANVAS')return canvasToBlob(target,scale,format);else{const w=target.scrollWidth||target.clientWidth||800;const h=target.scrollHeight||target.clientHeight||600;const canvas=document.createElement('canvas');canvas.width=w*scale;canvas.height=h*scale;const ctx=canvas.getContext('2d');ctx.scale(scale,scale);ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--av-surface').trim()||'#f5f0eb';ctx.fillRect(0,0,w,h);const svgStr=`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml">${target.outerHTML}</div></foreignObject></svg>`;const blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});const url=URL.createObjectURL(blob);return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>{ctx.drawImage(img,0,0);URL.revokeObjectURL(url);canvas.toBlob(b=>b?resolve(b):reject(new Error('toBlob failed')),format||'image/png');};img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('HTML export failed'));};img.src=url;});}}
+  function svgToBlob(svgEl,scale,format){return new Promise((resolve,reject)=>{const vb=svgEl.viewBox?.baseVal;const w=vb?.width||svgEl.clientWidth||800;const h=vb?.height||svgEl.clientHeight||600;const clone=svgEl.cloneNode(true);const computed=getComputedStyle(document.documentElement);const vars=['--av-surface','--av-surface-alt','--av-text-primary','--av-text-secondary','--av-text-tertiary','--av-border','--av-accent','--av-chart-1','--av-chart-2','--av-chart-3','--av-chart-4','--av-chart-5','--av-chart-6'];let varCSS=':root{';vars.forEach(v=>{varCSS+=v+':'+computed.getPropertyValue(v).trim()+';';});varCSS+='}';let styleEl=clone.querySelector('style');if(!styleEl){styleEl=document.createElementNS('http://www.w3.org/2000/svg','style');clone.insertBefore(styleEl,clone.firstChild);}styleEl.textContent=varCSS+styleEl.textContent;clone.setAttribute('width',w*scale);clone.setAttribute('height',h*scale);if(!clone.getAttribute('viewBox'))clone.setAttribute('viewBox',`0 0 ${w} ${h}`);const svgStr=new XMLSerializer().serializeToString(clone);const svgBlob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});const url=URL.createObjectURL(svgBlob);const img=new Image();img.onload=()=>{const canvas=document.createElement('canvas');canvas.width=w*scale;canvas.height=h*scale;const ctx=canvas.getContext('2d');ctx.fillStyle=computed.getPropertyValue('--av-surface').trim()||'#f5f0eb';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0);URL.revokeObjectURL(url);canvas.toBlob(blob=>{if(blob)resolve(blob);else reject(new Error('toBlob failed')),format||'image/png');};img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('SVG load failed'));};img.src=url;});}
+  async function exportBlob(target,scale,format){scale=scale||SCALE_DEFAULT;if(target.tagName==='SVG')return svgToBlob(target,scale,format);else if(target.tagName==='CANVAS')return canvasToBlob(target,scale,format);else{const w=target.scrollWidth||target.clientWidth||800;const h=target.scrollHeight||target.clientHeight||600;const canvas=document.createElement('canvas');canvas.width=w*scale;canvas.height=h*scale;const ctx=canvas.getContext('2d');ctx.scale(scale,scale);ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--av-surface').trim()||'#f5f0eb';ctx.fillRect(0,0,w,h);const svgStr=`<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"${w}\" height=\"${h}\"><foreignObject width=\"100%\" height=\"100%\"><div xmlns=\"http://www.w3.org/1999/xhtml\">${target.outerHTML}</div></foreignObject></svg>`;const blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});const url=URL.createObjectURL(blob);return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>{ctx.drawImage(img,0,0);URL.revokeObjectURL(url);canvas.toBlob(b=>b?resolve(b):reject(new Error('toBlob failed')),format||'image/png');};img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('HTML export failed'));};img.src=url});}}
   function download(blob,filename){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(url),1000);}
   async function exportPNG(selector,scale){const target=findTarget(selector);if(!target){toast('No export target found');return;}try{const blob=await exportBlob(target,scale||SCALE_DEFAULT,'image/png');download(blob,'archviz-'+Date.now()+'.png');toast('PNG exported (4× raster)');}catch(e){toast('Export failed: '+e.message);console.error(e);}}
   async function exportWebP(selector,scale){const target=findTarget(selector);if(!target){toast('No export target found');return;}try{const blob=await exportBlob(target,scale||SCALE_DEFAULT,'image/webp');download(blob,'archviz-'+Date.now()+'.webp');toast('WebP exported (4× raster)');}catch(e){toast('Export failed: '+e.message);console.error(e);}}

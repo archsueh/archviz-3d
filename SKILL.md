@@ -10,7 +10,7 @@ description: |
   For article illustrations / sketches → use archviz-sketch.
 license: MIT
 metadata:
-  version: 0.1.0
+  version: 0.2.0
   source: https://github.com/archsueh/archviz-3d
   risk: safe
   author: archsueh
