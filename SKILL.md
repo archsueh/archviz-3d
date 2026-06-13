@@ -4,11 +4,11 @@ description: |
   当用户需要建筑结构、楼层功能、机械爆炸图、空间剖面或交互式 3D 教学可视化（明确提到 3D/building/floorplan/structure/exploded/spatial/walkthrough/mechanical）时加载。
   自包含 HTML（Three.js + animejs v4 CDN），零构建。
   2D 流程图/信息可视化 → archviz。
-  手绘/生草图配图 → archviz-sketch。
+  手绘/草图配图 → archviz-sketch。
   超出自包含复杂度时引导切 Vite + R3F。
 license: MIT
 metadata:
-  version: 0.3.0
+  version: 0.4.0
   source: https://github.com/archsueh/archviz-3d
   risk: safe
   author: archsueh
@@ -49,17 +49,139 @@ metadata:
 - OrbitControls (Three.js addons)
 - Self-contained HTML (no build step, no npm)
 
+## CDN Importmap (verified)
+
+```html
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+    "animejs": "https://cdn.jsdelivr.net/npm/animejs@4.4.1/dist/bundles/anime.esm.js"
+  }
+}
+</script>
+```
+
 ## Key Gotchas
 
 | Issue | Fix |
 |---|---|
 | animejs v4 path | `dist/bundles/anime.esm.js`, not v3's `lib/anime.es.js` |
 | animejs v4 API | `animate(target, props)`, not `anime({targets})` |
-| Function naming | NEVER name a function `animate` — shadows the import |
-| Ground burial | Objects at y=0 bury into ground; offset to y=2+ |
-| Camera transitions | Use tween, never direct `.set()` |
+| Function naming | NEVER name a function `animate` — shadows the import; use `renderLoop` or `tick` |
+| Ground burial | Objects at y=0 bury into ground; offset to y=2+ or lower ground plane |
+| Camera transitions | Use tween, never direct `.set()` (causes instant jump) |
 | Max lights | 3 lights enforced for performance |
 | OrbitControls + keyboard | Canvas needs `data-orbit` attribute to prevent export keyboard conflicts |
+
+## Detailed Pitfalls & Patterns
+
+### 1. Module Scope — THREE Not Available in Non-Module Scripts
+
+**Symptom:** `THREE is not defined` in non-module script that runs before module imports.
+
+**Cause:** Non-module `<script>` runs synchronously before `<script type="module">` (which is deferred). A non-module `<script>` defining a contract class runs FIRST, when THREE hasn't been imported yet.
+
+**Fix:** Put all code inside one `<script type="module">` block, after imports:
+
+```html
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// Contract/utility code here — THREE is available
+class ArchVizBuild {
+  constructor() { this.root = new THREE.Group(); }
+}
+
+// Scene code follows
+const renderer = createArchVizRenderer(canvas);
+```
+
+**Alternative (fallback):** Expose globally from the module:
+```html
+<script type="module">
+import * as THREE from 'three';
+window.THREE = THREE;
+</script>
+<script>
+// Contract code here — THREE is available via window.THREE
+</script>
+```
+
+**Symptom of wrong approach:** Canvas goes completely black — the module silently fails, nothing renders.
+
+### 2. HTML Comment Nesting — Metadata Leaks as Visible Text
+
+**Symptom:** File metadata (author, date, description) appears as visible text on the page.
+
+**Cause:** Nested HTML comments — the `-->` on an inner comment closes the outer one:
+```html
+<!--                           ← opens comment A
+<!-- archviz Phase 3 | 2026-06-13 -->   ← closes comment A (the --> on this line)
+  Three.js Building...          ← NOW OUTSIDE COMMENT — rendered as text!
+-->
+```
+
+**Fix:** Don't nest comments. Either:
+```html
+<!-- archviz Phase 3 | 2026-06-13 -->
+<!-- Three.js Building Structure Visualization -->
+```
+Or a single block:
+```html
+<!--
+  archviz Phase 3 | 2026-06-13
+  Three.js Building Structure Visualization
+-->
+```
+
+### 3. Batch Template Injection — drawChart Not Wrapping
+
+**Symptom:** After batch-injecting theme/export modules, canvas charts don't redraw on theme change.
+
+**Cause:** The injection script adds `window.addEventListener('archviz-theme-changed', ...)` but the drawing code isn't wrapped in a `drawChart()` function.
+
+**Fix:** After injection, find the main drawing script (contains `getContext`) and wrap:
+```js
+// Before (inline drawing code):
+const ctx = document.getElementById('c').getContext('2d');
+// ... drawing code ...
+
+// After (wrapped):
+function drawChart() {
+  const ctx = document.getElementById('c').getContext('2d');
+  // ... drawing code ...
+}
+drawChart();
+```
+
+**Note:** Theme toggle changes CSS vars but canvas stays same color — because canvas reads colors once at load, not reactively. Wrapping in `drawChart()` enables re-invocation on theme change.
+
+### 4. WebGL Not Rendering in Headless Browser
+
+**Symptom:** Canvas is blank in automated browser tests, but works in real browser.
+
+**Cause:** Headless browser may not have GPU/WebGL 2.0 support. Even original working templates show black canvas + empty exceptions.
+
+**Mitigation:** This is a testing limitation, not a code bug. Verify code structure (braces balanced, references correct) via script. Ask user to test in real browser.
+
+### 5. MCP Server `--args` Pitfall
+
+**Wrong:** `--args "-m archviz3d.mcp_server"` (single string)
+**Right:** `--args "-m" "archviz3d.mcp_server"` (space-separated)
+
+## Engineering Hygiene Constants
+
+```js
+const ARCHVIZ_HYGIENE = {
+  DPR_CAP: 2,                    // Math.min(devicePixelRatio, 2)
+  MAX_LIGHTS: 3,
+  SHADOW_MAP_SIZE: 1024,         // Not 2048 — perf balance
+  FRUSTUM_CULLING: true,
+};
+```
 
 ## Architecture
 
@@ -71,6 +193,7 @@ archviz-3d/
 │   ├── _archviz-theme.html    # Shared theme system (from archviz)
 │   ├── _archviz-export.html   # Shared export system (from archviz)
 │   ├── _archviz-deps.html     # CDN importmap reference
+│   ├── _archviz-3d-contract.html  # ArchVizBuild contract
 │   ├── threejs-archviz.html   # Building structure visualization
 │   └── threejs-floorplan.html # Floor plan navigation
 ├── examples/
@@ -78,6 +201,32 @@ archviz-3d/
 │   └── hair-dryer-exploded.html
 └── references/
     └── (Phase 3: kinematics-formulas.md, performance-hygiene.md, mechlab-contract.md)
+```
+
+## ArchVizBuild Contract
+
+**File:** `_archviz-3d-contract.html` — reusable contract for all 3D templates.
+
+**Provides:**
+- `ArchVizBuild` base class (root, parts[], addPart, update, dispose, setWireframe, thumbnail)
+- `createArchVizRenderer(canvas)` — enforces dpr cap 2, shadow map, tone mapping
+- `createArchVizScene(bgColor)` — enforces frustum culling
+- `addLight(scene, light)` — enforces max 3 lights, standardizes shadow map size
+- `ARCHVIZ_HYGIENE` constants (DPR_CAP, MAX_LIGHTS, SHADOW_MAP_SIZE)
+- `window.beforeunload` dispose guard
+
+**Integration:** Include full content inside `<script type="module">` (after THREE import), NOT as a separate non-module script.
+
+**Explode pattern:** Use baked vector lerp (`lerpVectors` + smoothstep) instead of per-frame animejs:
+
+```js
+_updateExplode(t) {
+  const eased = t * t * (3 - 2 * t); // smoothstep
+  this.parts.forEach(part => {
+    const data = this._exploders.get(part.name);
+    part.group.position.lerpVectors(data.originalPos, data.originalPos.clone().add(data.vec), eased);
+  });
+}
 ```
 
 ## Theme & Export
@@ -94,10 +243,26 @@ Shared with archviz (2D): `_archviz-theme.html` + `_archviz-export.html`.
 | DENSITY | 4 | Spatial = less dense |
 | RESTRAINT | 7 | Minimal chrome, focus on structure |
 
+## MCP Server Setup
+
+```bash
+cd ~/Developer/archviz-3d
+/opt/homebrew/bin/python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[mcp]"
+
+hermes mcp add archviz-3d \
+  --command "/Users/mac/Developer/archviz-3d/.venv/bin/python" \
+  --args "-m" "archviz3d.mcp_server"
+```
+
+**Tools:** `archviz3d_generate(type, data, options)`, `archviz3d_list_types()`
+
+Full MCP architecture: see `sankey-rendering` skill → `references/mcp-architecture.md`.
+
 ## Future (Phase 3)
 
 - Physics-correct kinematics (slider-crank, planetary gears)
-- ArchVizBuild contract interface
 - Baked vector lerp explode
 - Offscreen canvas thumbnails
 - Engineering hygiene (single renderer, dpr cap, dispose)
