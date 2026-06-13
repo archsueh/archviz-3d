@@ -1,0 +1,221 @@
+<!-- archviz-skills Phase 3 | 2026-06-13 -->
+<!-- ArchVizBuild Contract + Engineering Hygiene Module -->
+<!-- Include BEFORE the main 3D scene script in any Three.js template -->
+<!-- Provides: ArchVizBuild contract, dispose guard, frustum culling, explode lerp, thumbnail -->
+
+<script>
+/**
+ * ArchVizBuild Contract v1.0
+ * 
+ * Every 3D template MUST implement this interface:
+ *   { root, parts[], update(t, mode), dispose() }
+ * 
+ * Whitebox:
+ * - root: THREE.Group — the top-level group added to scene
+ * - parts: Array<{name, group, explodeVec}> — each explodable component
+ * - update(t, mode): called each frame, t=0..1 progress, mode='normal'|'explode'|'wireframe'
+ * - dispose(): MUST clean up all GPU resources (geometry, materials, textures, render targets)
+ */
+
+// === Engineering Hygiene Constants ===
+const ARCHVIZ_HYGIENE = {
+  DPR_CAP: 2,                    // Max device pixel ratio
+  MAX_LIGHTS: 3,                 // Max light count
+  SHADOW_MAP_SIZE: 1024,         // Shadow resolution (not 2048 — perf balance)
+  FRUSTUM_CULLING: true,         // Auto-enable on all meshes
+  CONTACT_SHADOW_SIZE: 512,      // ContactShadow resolution
+};
+
+// === ArchVizBuild Base Class ===
+class ArchVizBuild {
+  constructor() {
+    this.root = new THREE.Group();
+    this.parts = [];
+    this._disposed = false;
+    this._exploders = new Map(); // name → {vec, originalPos}
+  }
+
+  /**
+   * Register a part for explode view
+   * @param {string} name - Part identifier
+   * @param {THREE.Group} group - The 3D group
+   * @param {THREE.Vector3} explodeVec - Direction/magnitude for explode
+   */
+  addPart(name, group, explodeVec) {
+    const part = { name, group, explodeVec: explodeVec.clone() };
+    this.parts.push(part);
+    this._exploders.set(name, {
+      vec: explodeVec.clone(),
+      originalPos: group.position.clone()
+    });
+    this.root.add(group);
+  }
+
+  /**
+   * Update loop — override in subclass
+   * @param {number} t - Progress 0..1
+   * @param {'normal'|'explode'|'wireframe'} mode
+   */
+  update(t, mode) {
+    if (this._disposed) return;
+    
+    if (mode === 'explode') {
+      this._updateExplode(t);
+    } else if (mode === 'normal') {
+      this._updateExplode(0); // collapse
+    }
+  }
+
+  /**
+   * Baked vector lerp explode — smooth, no per-frame animejs
+   * @private
+   */
+  _updateExplode(t) {
+    this.parts.forEach(part => {
+      const data = this._exploders.get(part.name);
+      if (!data) return;
+      // Smooth easing
+      const eased = t * t * (3 - 2 * t); // smoothstep
+      part.group.position.lerpVectors(
+        data.originalPos,
+        data.originalPos.clone().add(data.vec),
+        eased
+      );
+    });
+  }
+
+  /**
+   * Toggle wireframe on all meshes
+   * @param {boolean} on
+   */
+  setWireframe(on) {
+    this.root.traverse(child => {
+      if (child.isMesh) {
+        child.material.wireframe = on;
+      }
+    });
+  }
+
+  /**
+   * Dispose ALL GPU resources — MUST call when switching views or destroying
+   * Whitebox: traverses scene graph, disposes geometry + material + texture
+   */
+  dispose() {
+    if (this._disposed) return;
+    this._disposed = true;
+
+    this.root.traverse(child => {
+      if (child.isMesh) {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach(m => {
+              if (m.map) m.map.dispose();
+              if (m.normalMap) m.normalMap.dispose();
+              if (m.aoMap) m.aoMap.dispose();
+              m.dispose();
+            });
+          } else {
+            if (child.material.map) child.material.map.dispose();
+            if (child.material.normalMap) child.material.normalMap.dispose();
+            if (child.material.aoMap) child.material.aoMap.dispose();
+            child.material.dispose();
+          }
+        }
+      }
+      if (child.isLight && child.shadow) {
+        if (child.shadow.map) child.shadow.map.dispose();
+      }
+    });
+
+    // Remove from parent
+    if (this.root.parent) this.root.parent.remove(this.root);
+  }
+
+  /**
+   * Generate offscreen thumbnail
+   * @param {THREE.WebGLRenderer} renderer
+   * @param {THREE.Camera} camera
+   * @param {number} size - Thumbnail dimension in px
+   * @returns {string} data URL
+   */
+  thumbnail(renderer, camera, size) {
+    size = size || 128;
+    const tmpCanvas = document.createElement('canvas');
+    tmpCanvas.width = size;
+    tmpCanvas.height = size;
+    const tmpRenderer = new THREE.WebGLRenderer({ canvas: tmpCanvas, antialias: false });
+    tmpRenderer.setSize(size, size);
+    tmpRenderer.setClearColor(0xf5f0eb);
+
+    // Clone camera for thumbnail
+    const thumbCam = camera.clone();
+    thumbCam.aspect = 1;
+    thumbCam.updateProjectionMatrix();
+
+    tmpRenderer.render(this.root.children.length > 0 ? this.root : new THREE.Scene(), thumbCam);
+    const dataURL = tmpCanvas.toDataURL('image/png');
+    tmpRenderer.dispose();
+    return dataURL;
+  }
+}
+
+// === Renderer Factory (enforces hygiene) ===
+function createArchVizRenderer(canvas) {
+  const renderer = new THREE.WebGLRenderer({
+    canvas: canvas,
+    antialias: true,
+    powerPreference: 'high-performance'
+  });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, ARCHVIZ_HYGIENE.DPR_CAP));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  renderer.info.autoReset = false; // For perf monitoring
+  return renderer;
+}
+
+// === Scene Factory (enforces light cap) ===
+function createArchVizScene(bgColor) {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(bgColor || 0xf5f5f4);
+
+  // Auto frustum culling on add
+  scene.onBeforeRender = () => {
+    scene.traverse(child => {
+      if (child.isMesh) child.frustumCulled = ARCHVIZ_HYGIENE.FRUSTUM_CULLING;
+    });
+  };
+
+  return scene;
+}
+
+// === Light Helpers (enforce cap) ===
+function addLight(scene, light) {
+  let lightCount = 0;
+  scene.traverse(c => { if (c.isLight) lightCount++; });
+  if (lightCount >= ARCHVIZ_HYGIENE.MAX_LIGHTS) {
+    console.warn(`archviz-3d: light cap (${ARCHVIZ_HYGIENE.MAX_LIGHTS}) reached, skipping additional light`);
+    return;
+  }
+  if (light.shadow) {
+    light.shadow.mapSize.width = ARCHVIZ_HYGIENE.SHADOW_MAP_SIZE;
+    light.shadow.mapSize.height = ARCHVIZ_HYGIENE.SHADOW_MAP_SIZE;
+  }
+  scene.add(light);
+}
+
+// === Dispose Guard (window unload) ===
+window.addEventListener('beforeunload', () => {
+  if (window._archvizBuild) window._archvizBuild.dispose();
+});
+
+// Expose globally
+window.ArchVizBuild = ArchVizBuild;
+window.createArchVizRenderer = createArchVizRenderer;
+window.createArchVizScene = createArchVizScene;
+window.addLight = addLight;
+window.ARCHVIZ_HYGIENE = ARCHVIZ_HYGIENE;
+</script>
