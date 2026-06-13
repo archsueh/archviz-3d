@@ -1,0 +1,537 @@
+<!--
+<!-- archviz-skills upgrade Phase 1 | 2026-06-13 -->
+  Three.js Floor Plan Visualization (archviz-skills)
+  Use for: floor plan extrusion, multi-floor navigation, room layout
+  Stack: Three.js (CDN) + animejs (CDN) + OrbitControls
+  Dials: Complexity 5, Density 4, Restraint 7
+  Tokens: structure=#a8a29e, floor=#e8e4e0, accent-3d=#002FA7
+  Self-contained: no build step, no external models
+-->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Floor Plan — archviz-skills</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--av-surface, #f5f5f4); font-family: -apple-system, 'Helvetica Neue', sans-serif; overflow: hidden; }
+  #canvas { width: 100vw; height: 100vh; display: block; }
+  #ui {
+    position: fixed; top: 20px; left: 20px; z-index: 10;
+    display: flex; gap: 8px; flex-direction: column;
+  }
+  .btn {
+    background: #e8e4e0; border: 1px solid #a8a29e; color: #1B365D;
+    padding: 8px 16px; font-size: 13px; cursor: pointer;
+    font-weight: 500; letter-spacing: 0.02em;
+    transition: background 0.2s;
+  }
+  .btn:hover { background: #d6d3d1; }
+  .btn.active { background: #002FA7; color: #f5f5f4; border-color: #002FA7; }
+  #info {
+    position: fixed; bottom: 20px; left: 20px; z-index: 10;
+    color: #78716c; font-size: 12px; line-height: 1.6;
+  }
+  #floor-label {
+    position: fixed; top: 20px; right: 20px; z-index: 10;
+    font-size: 48px; font-weight: 200; color: #a8a29e;
+    letter-spacing: -0.02em;
+  }
+
+/* === archviz-skills Theme Variables === */
+:root, [data-palette="warm-paper"] {
+  --av-surface: #f5f0eb;
+  --av-surface-alt: #e8e4e0;
+  --av-surface-raised: #faf9f5;
+  --av-text-primary: #1B365D;
+  --av-text-secondary: #5e5d59;
+  --av-text-tertiary: #87867f;
+  --av-border: #d6d3d1;
+  --av-accent: #002FA7;
+  --av-accent-soft: rgba(0,47,167,0.12);
+  --av-success: #3B6D11;
+  --av-warning: #854F0B;
+  --av-danger: #A32D2D;
+  --av-chart-1: #002FA7;
+  --av-chart-2: #94a3b8;
+  --av-chart-3: #a8a29e;
+  --av-chart-4: #d6d3d1;
+  --av-chart-5: #c96442;
+  --av-chart-6: #5e5d59;
+}
+[data-palette="swiss-neutral"] {
+  --av-surface: #f8f8f6;
+  --av-surface-alt: #efeeec;
+  --av-surface-raised: #ffffff;
+  --av-text-primary: #1a1a18;
+  --av-text-secondary: #5f5e5a;
+  --av-text-tertiary: #88877f;
+  --av-border: #d9d8d4;
+  --av-accent: #185FA5;
+  --av-accent-soft: rgba(24,95,165,0.10);
+  --av-success: #3B6D11;
+  --av-warning: #854F0B;
+  --av-danger: #A32D2D;
+  --av-chart-1: #185FA5;
+  --av-chart-2: #0F6E56;
+  --av-chart-3: #534AB7;
+  --av-chart-4: #993C1D;
+  --av-chart-5: #854F0B;
+  --av-chart-6: #5F5E5A;
+}
+[data-palette="editorial-parchment"] {
+  --av-surface: #f5f4ed;
+  --av-surface-alt: #e8e6dc;
+  --av-surface-raised: #faf9f5;
+  --av-text-primary: #141413;
+  --av-text-secondary: #5e5d59;
+  --av-text-tertiary: #87867f;
+  --av-border: #c9c7bc;
+  --av-accent: #c96442;
+  --av-accent-soft: rgba(201,100,66,0.12);
+  --av-success: #3B6D11;
+  --av-warning: #854F0B;
+  --av-danger: #A32D2D;
+  --av-chart-1: #c96442;
+  --av-chart-2: #5e5d59;
+  --av-chart-3: #87867f;
+  --av-chart-4: #b0aea5;
+  --av-chart-5: #141413;
+  --av-chart-6: #d6d3d1;
+}
+[data-palette="ikb-dark"], [data-theme="dark"]:not([data-palette]) {
+  --av-surface: #1a1a2e;
+  --av-surface-alt: #252540;
+  --av-surface-raised: #2a2a45;
+  --av-text-primary: #e8e6de;
+  --av-text-secondary: #b4b2a9;
+  --av-text-tertiary: #888780;
+  --av-border: rgba(255,255,255,0.15);
+  --av-accent: #6B8AFF;
+  --av-accent-soft: rgba(107,138,255,0.15);
+  --av-success: #97C459;
+  --av-warning: #EF9F27;
+  --av-danger: #F09595;
+  --av-chart-1: #6B8AFF;
+  --av-chart-2: #5DCAA5;
+  --av-chart-3: #AFA9EC;
+  --av-chart-4: #F0997B;
+  --av-chart-5: #EF9F27;
+  --av-chart-6: #b4b2a9;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-palette]):not([data-theme]) {
+    --av-surface: #1a1a2e;
+    --av-surface-alt: #252540;
+    --av-surface-raised: #2a2a45;
+    --av-text-primary: #e8e6de;
+    --av-text-secondary: #b4b2a9;
+    --av-text-tertiary: #888780;
+    --av-border: rgba(255,255,255,0.15);
+    --av-accent: #6B8AFF;
+    --av-accent-soft: rgba(107,138,255,0.15);
+    --av-success: #97C459;
+    --av-warning: #EF9F27;
+    --av-danger: #F09595;
+    --av-chart-1: #6B8AFF;
+    --av-chart-2: #5DCAA5;
+    --av-chart-3: #AFA9EC;
+    --av-chart-4: #F0997B;
+    --av-chart-5: #EF9F27;
+    --av-chart-6: #b4b2a9;
+  }
+}
+</style>
+</head>
+<body>
+<div id="ui">
+  <button class="btn" onclick="goFloor(3)">4F · 屋顶</button>
+  <button class="btn" onclick="goFloor(2)">3F · 办公</button>
+  <button class="btn" onclick="goFloor(1)">2F · 教室</button>
+  <button class="btn active" onclick="goFloor(0)">1F · 门厅</button>
+  <button class="btn" onclick="showAll()">全部楼层</button>
+  <button class="btn" onclick="toggleExplode()">分解</button>
+  <button class="btn" onclick="window.archvizTheme?.toggleTheme()">🎨 主题</button>
+</div>
+<div id="floor-label">1F</div>
+<div id="info">
+  楼层平面图 · archviz-skills<br>
+  点击楼层按钮切换 · 鼠标拖拽旋转
+</div>
+<canvas id="canvas" data-orbit></canvas>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+    "animejs": "https://cdn.jsdelivr.net/npm/animejs@4.4.1/dist/bundles/anime.esm.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { animate } from 'animejs';
+
+// animejs v4 helper
+function tween(target, props) { return animate(target, props); }
+
+// === Tokens ===
+const TOKENS = {
+  wall:    0xa8a29e,
+  floor:   0xe8e4e0,
+  accent:  0x002FA7,
+  room:    0xd6d3d1,
+  door:    0x78716c,
+  ambient: 0xf5f5f4,
+  ground:  0xd6d3d1,
+};
+
+// === Scene ===
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(TOKENS.ambient);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(20, 18, 20);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.minDistance = 5;
+controls.maxDistance = 60;
+controls.maxPolarAngle = Math.PI / 2 + 0.1;
+controls.target.set(0, 4, 0);
+
+// === Lights ===
+scene.add(new THREE.HemisphereLight(TOKENS.ambient, TOKENS.ground, 0.7));
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(15, 20, 10);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.set(1024, 1024);
+scene.add(dirLight);
+scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+
+// === Floor data (procedural rooms) ===
+const FLOOR_H = 3.2;
+const FLOOR_W = 14;
+const FLOOR_D = 10;
+const WALL_H = 2.8;
+const WALL_T = 0.15;
+
+const floorPlans = [
+  { // 1F: 门厅
+    label: '1F',
+    rooms: [
+      { x: -5, z: -3, w: 10, d: 6, name: '门厅', color: 0xe8e4e0 },
+      { x: -5, z: 3, w: 4, d: 4, name: '值班室', color: 0xd6d3d1 },
+      { x: -1, z: 3, w: 4, d: 4, name: '设备间', color: 0xd6d3d1 },
+      { x: 3, z: 3, w: 4, d: 4, name: '楼梯间', color: 0xc8c4c0 },
+    ]
+  },
+  { // 2F: 教室
+    label: '2F',
+    rooms: [
+      { x: -5, z: -3, w: 6, d: 6, name: '教室 A', color: 0xe4e8f0 },
+      { x: 1, z: -3, w: 6, d: 6, name: '教室 B', color: 0xe4e8f0 },
+      { x: -5, z: 3, w: 4, d: 4, name: '走廊', color: 0xd6d3d1 },
+      { x: -1, z: 3, w: 4, d: 4, name: '准备室', color: 0xd6d3d1 },
+      { x: 3, z: 3, w: 4, d: 4, name: '楼梯间', color: 0xc8c4c0 },
+    ]
+  },
+  { // 3F: 办公
+    label: '3F',
+    rooms: [
+      { x: -5, z: -3, w: 5, d: 6, name: '办公室 A', color: 0xf0f4e0 },
+      { x: 0, z: -3, w: 5, d: 6, name: '办公室 B', color: 0xf0f4e0 },
+      { x: -5, z: 3, w: 3, d: 4, name: '会议室', color: 0xd6d3d1 },
+      { x: -2, z: 3, w: 3, d: 4, name: '茶水间', color: 0xd6d3d1 },
+      { x: 1, z: 3, w: 3, d: 4, name: '走廊', color: 0xd6d3d1 },
+      { x: 4, z: 3, w: 3, d: 4, name: '楼梯间', color: 0xc8c4c0 },
+    ]
+  },
+  { // 4F: 屋顶
+    label: '4F',
+    rooms: [
+      { x: -5, z: -3, w: 10, d: 6, name: '屋顶平台', color: 0xd6d3d1 },
+      { x: -5, z: 3, w: 4, d: 4, name: '机房', color: 0xc8c4c0 },
+      { x: 3, z: 3, w: 4, d: 4, name: '楼梯间', color: 0xc8c4c0 },
+    ]
+  },
+];
+
+// === Build floors ===
+const allFloorGroups = [];
+const roomLabels = [];
+
+floorPlans.forEach((plan, fi) => {
+  const group = new THREE.Group();
+  group.position.y = fi * FLOOR_H;
+
+  // Floor slab
+  const slabGeo = new THREE.BoxGeometry(FLOOR_W, 0.2, FLOOR_D);
+  const slabMat = new THREE.MeshStandardMaterial({ color: TOKENS.floor, roughness: 0.9 });
+  const slab = new THREE.Mesh(slabGeo, slabMat);
+  slab.receiveShadow = true;
+  group.add(slab);
+
+  // Rooms
+  plan.rooms.forEach(room => {
+    const roomGroup = new THREE.Group();
+
+    // Room floor (slightly above slab)
+    const rfGeo = new THREE.BoxGeometry(room.w, 0.05, room.d);
+    const rfMat = new THREE.MeshStandardMaterial({ color: room.color, roughness: 0.95 });
+    const rf = new THREE.Mesh(rfGeo, rfMat);
+    rf.position.set(room.x, 0.12, room.z);
+    rf.receiveShadow = true;
+    roomGroup.add(rf);
+
+    // Walls (4 sides, with gaps for doors)
+    const wallMat = new THREE.MeshStandardMaterial({ color: TOKENS.wall, roughness: 0.8 });
+
+    // Front wall (z - d/2)
+    const wfGeo = new THREE.BoxGeometry(room.w, WALL_H, WALL_T);
+    const wf = new THREE.Mesh(wfGeo, wallMat);
+    wf.position.set(room.x, WALL_H / 2 + 0.2, room.z - room.d / 2);
+    wf.castShadow = true;
+    roomGroup.add(wf);
+
+    // Back wall
+    const wb = new THREE.Mesh(wfGeo, wallMat);
+    wb.position.set(room.x, WALL_H / 2 + 0.2, room.z + room.d / 2);
+    wb.castShadow = true;
+    roomGroup.add(wb);
+
+    // Left wall
+    const wlGeo = new THREE.BoxGeometry(WALL_T, WALL_H, room.d);
+    const wl = new THREE.Mesh(wlGeo, wallMat);
+    wl.position.set(room.x - room.w / 2, WALL_H / 2 + 0.2, room.z);
+    wl.castShadow = true;
+    roomGroup.add(wl);
+
+    // Right wall
+    const wr = new THREE.Mesh(wlGeo, wallMat);
+    wr.position.set(room.x + room.w / 2, WALL_H / 2 + 0.2, room.z);
+    wr.castShadow = true;
+    roomGroup.add(wr);
+
+    group.add(roomGroup);
+  });
+
+  scene.add(group);
+  allFloorGroups.push(group);
+});
+
+// === Room label sprites ===
+function createLabel(text, position) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'transparent';
+  ctx.fillRect(0, 0, 256, 64);
+  ctx.font = '24px -apple-system, sans-serif';
+  ctx.fillStyle = '#1B365D';
+  ctx.textAlign = 'center';
+  ctx.fillText(text, 128, 40);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.8 });
+  const sprite = new THREE.Sprite(mat);
+  sprite.position.copy(position);
+  sprite.scale.set(3, 0.75, 1);
+  return sprite;
+}
+
+floorPlans.forEach((plan, fi) => {
+  plan.rooms.forEach(room => {
+    const label = createLabel(room.name, new THREE.Vector3(room.x, fi * FLOOR_H + 1.5, room.z));
+    scene.add(label);
+    roomLabels.push(label);
+  });
+});
+
+// === Ground ===
+const gGeo = new THREE.PlaneGeometry(40, 40);
+const gMesh = new THREE.Mesh(gGeo, new THREE.MeshStandardMaterial({ color: 0xd6d3d1, roughness: 1 }));
+gMesh.rotation.x = -Math.PI / 2;
+gMesh.position.y = -0.01;
+gMesh.receiveShadow = true;
+scene.add(gMesh);
+
+scene.add(new THREE.GridHelper(40, 40, 0xa8a29e, 0xd6d3d1));
+
+// === Floor navigation ===
+let currentFloor = 0;
+let exploded = false;
+
+function updateFloorLabel(text) {
+  const el = document.getElementById('floor-label');
+  el.textContent = text;
+}
+
+window.goFloor = function(index) {
+  currentFloor = index;
+
+  // Update buttons
+  document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+
+  // Animate floor visibility
+  allFloorGroups.forEach((g, i) => {
+    const targetOpacity = (i === index) ? 1 : 0.1;
+    g.traverse(child => {
+      if (child.isMesh && child.material) {
+        tween(child.material, { opacity: targetOpacity,
+          duration: 600,
+          easing: 'easeInOutCubic', });
+        child.material.transparent = true;
+      }
+    });
+  });
+
+  // Camera tween to focus on floor
+  const targetY = index * FLOOR_H + 5;
+  tween(camera.position, { x: 15, y: targetY + 8, z: 15,
+    duration: 800,
+    easing: 'easeInOutCubic', });
+  tween(controls.target, { x: 0, y: targetY - 3, z: 0,
+    duration: 800,
+    easing: 'easeInOutCubic', });
+
+  updateFloorLabel(floorPlans[index].label);
+};
+
+window.showAll = function() {
+  document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+
+  allFloorGroups.forEach(g => {
+    g.traverse(child => {
+      if (child.isMesh && child.material) {
+        tween(child.material, { opacity: 1,
+          duration: 600,
+          easing: 'easeInOutCubic', });
+        child.material.transparent = false;
+      }
+    });
+  });
+
+  tween(camera.position, { x: 20, y: 18, z: 20,
+    duration: 800,
+    easing: 'easeInOutCubic', });
+  tween(controls.target, { x: 0, y: 4, z: 0,
+    duration: 800,
+    easing: 'easeInOutCubic', });
+
+  updateFloorLabel('ALL');
+};
+
+window.toggleExplode = function() {
+  exploded = !exploded;
+  allFloorGroups.forEach((g, i) => {
+    const targetY = exploded ? i * (FLOOR_H * 1.8) : i * FLOOR_H;
+    tween(g.position, { y: targetY,
+      duration: 800,
+      easing: 'easeInOutCubic', });
+  });
+};
+
+// === Responsive ===
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// === Render loop ===
+function renderLoop() {
+  requestAnimationFrame(renderLoop);
+  controls.update();
+  renderer.render(scene, camera);
+}
+renderLoop();
+</script>
+
+<script>
+(function() {
+  'use strict';
+  const PALETTES = {
+    'warm-paper':          { label: 'Warm Paper',    mode: 'light' },
+    'swiss-neutral':       { label: 'Swiss Neutral',  mode: 'light' },
+    'editorial-parchment': { label: 'Editorial',      mode: 'light' },
+    'ikb-dark':            { label: 'IKB Dark',       mode: 'dark'  },
+  };
+  window.ARCHVIZ_PALETTES = PALETTES;
+  let currentPalette = 'warm-paper';
+  function applyPalette(name) {
+    if (!PALETTES[name]) return;
+    currentPalette = name;
+    document.documentElement.setAttribute('data-palette', name);
+    document.documentElement.setAttribute('data-theme', PALETTES[name].mode);
+    localStorage.setItem('archviz-palette', name);
+  }
+  function toggleTheme() {
+    const order = ['warm-paper','swiss-neutral','editorial-parchment','ikb-dark'];
+    const idx = order.indexOf(currentPalette);
+    applyPalette(order[(idx + 1) % order.length]);
+  }
+  function getCurrentPalette() { return currentPalette; }
+  function isDark() { return PALETTES[currentPalette]?.mode === 'dark'; }
+  function init() {
+    const saved = localStorage.getItem('archviz-palette');
+    if (saved && PALETTES[saved]) applyPalette(saved);
+    else if (window.matchMedia('(prefers-color-scheme: dark)').matches) applyPalette('ikb-dark');
+  }
+  window.archvizTheme = { applyPalette, toggleTheme, getCurrentPalette, isDark };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+
+<style id="archviz-export-styles">
+#archviz-export-btn{position:fixed;top:12px;right:140px;z-index:9999;background:var(--av-surface-raised,#faf9f5);border:1px solid var(--av-border,#d6d3d1);border-radius:8px;padding:6px 12px;font:12px/1 system-ui,-apple-system,sans-serif;color:var(--av-text-secondary,#5e5d59);cursor:pointer;transition:background 0.2s;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+#archviz-export-btn:hover{background:var(--av-surface-alt,#e8e4e0)}
+#archviz-export-menu{display:none;position:fixed;top:44px;right:140px;z-index:10000;background:var(--av-surface-raised,#faf9f5);border:1px solid var(--av-border,#d6d3d1);border-radius:10px;padding:6px 0;min-width:180px;box-shadow:0 4px 20px rgba(0,0,0,0.12);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+#archviz-export-menu.open{display:block}
+#archviz-export-menu button{display:block;width:100%;text-align:left;padding:8px 16px;border:none;background:none;font:13px/1.4 system-ui,-apple-system,sans-serif;color:var(--av-text-primary,#1B365D);cursor:pointer}
+#archviz-export-menu button:hover{background:var(--av-accent-soft,rgba(0,47,167,0.08))}
+#archviz-export-menu .sep{height:1px;background:var(--av-border,#d6d3d1);margin:4px 0}
+#archviz-export-menu .shortcut{float:right;color:var(--av-text-tertiary,#87867f);font-size:11px}
+#archviz-export-toast{display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10001;background:var(--av-surface-raised,#faf9f5);border:1px solid var(--av-border,#d6d3d1);border-radius:8px;padding:10px 20px;font:13px/1 system-ui,-apple-system,sans-serif;color:var(--av-text-primary,#1B365D);box-shadow:0 4px 16px rgba(0,0,0,0.12);animation:archviz-toast-in 0.3s ease}
+@keyframes archviz-toast-in{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+</style>
+<script>
+(function(){
+  'use strict';
+  const SCALE_DEFAULT = 4;
+  function toast(msg){let el=document.getElementById('archviz-export-toast');if(!el){el=document.createElement('div');el.id='archviz-export-toast';document.body.appendChild(el);}el.textContent=msg;el.style.display='block';clearTimeout(el._t);el._t=setTimeout(()=>el.style.display='none',2200);}
+  function findTarget(selector){if(selector)return document.querySelector(selector);return document.querySelector('.archviz-export-target')||document.querySelector('svg')||document.querySelector('canvas')||document.querySelector('article,.card,.canvas');}
+  function canvasToBlob(canvasEl,scale,format){return new Promise((resolve,reject)=>{const tmpCanvas=document.createElement('canvas');tmpCanvas.width=canvasEl.width*scale;tmpCanvas.height=canvasEl.height*scale;const ctx=tmpCanvas.getContext('2d');ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(canvasEl,0,0,tmpCanvas.width,tmpCanvas.height);tmpCanvas.toBlob(blob=>blob?resolve(blob):reject(new Error('toBlob failed')),format||'image/png');});}
+  function svgToBlob(svgEl,scale,format){return new Promise((resolve,reject)=>{const vb=svgEl.viewBox?.baseVal;const w=vb?.width||svgEl.clientWidth||800;const h=vb?.height||svgEl.clientHeight||600;const clone=svgEl.cloneNode(true);const computed=getComputedStyle(document.documentElement);const vars=['--av-surface','--av-surface-alt','--av-text-primary','--av-text-secondary','--av-text-tertiary','--av-border','--av-accent','--av-chart-1','--av-chart-2','--av-chart-3','--av-chart-4','--av-chart-5','--av-chart-6'];let varCSS=':root{';vars.forEach(v=>{varCSS+=v+':'+computed.getPropertyValue(v).trim()+';';});varCSS+='}';let styleEl=clone.querySelector('style');if(!styleEl){styleEl=document.createElementNS('http://www.w3.org/2000/svg','style');clone.insertBefore(styleEl,clone.firstChild);}styleEl.textContent=varCSS+styleEl.textContent;clone.setAttribute('width',w*scale);clone.setAttribute('height',h*scale);if(!clone.getAttribute('viewBox'))clone.setAttribute('viewBox',`0 0 ${w} ${h}`);const svgStr=new XMLSerializer().serializeToString(clone);const svgBlob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});const url=URL.createObjectURL(svgBlob);const img=new Image();img.onload=()=>{const canvas=document.createElement('canvas');canvas.width=w*scale;canvas.height=h*scale;const ctx=canvas.getContext('2d');ctx.fillStyle=computed.getPropertyValue('--av-surface').trim()||'#f5f0eb';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0);URL.revokeObjectURL(url);canvas.toBlob(blob=>{if(blob)resolve(blob);else reject(new Error('toBlob failed'));},format||'image/png');};img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('SVG load failed'));};img.src=url;});}
+  async function exportBlob(target,scale,format){scale=scale||SCALE_DEFAULT;if(target.tagName==='SVG')return svgToBlob(target,scale,format);else if(target.tagName==='CANVAS')return canvasToBlob(target,scale,format);else{const w=target.scrollWidth||target.clientWidth||800;const h=target.scrollHeight||target.clientHeight||600;const canvas=document.createElement('canvas');canvas.width=w*scale;canvas.height=h*scale;const ctx=canvas.getContext('2d');ctx.scale(scale,scale);ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--av-surface').trim()||'#f5f0eb';ctx.fillRect(0,0,w,h);const svgStr=`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml">${target.outerHTML}</div></foreignObject></svg>`;const blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});const url=URL.createObjectURL(blob);return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>{ctx.drawImage(img,0,0);URL.revokeObjectURL(url);canvas.toBlob(b=>b?resolve(b):reject(new Error('toBlob failed')),format||'image/png');};img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('HTML export failed'));};img.src=url;});}}
+  function download(blob,filename){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(url),1000);}
+  async function exportPNG(selector,scale){const target=findTarget(selector);if(!target){toast('No export target found');return;}try{const blob=await exportBlob(target,scale||SCALE_DEFAULT,'image/png');download(blob,'archviz-'+Date.now()+'.png');toast('PNG exported (4× raster)');}catch(e){toast('Export failed: '+e.message);console.error(e);}}
+  async function exportWebP(selector,scale){const target=findTarget(selector);if(!target){toast('No export target found');return;}try{const blob=await exportBlob(target,scale||SCALE_DEFAULT,'image/webp');download(blob,'archviz-'+Date.now()+'.webp');toast('WebP exported (4× raster)');}catch(e){toast('Export failed: '+e.message);console.error(e);}}
+  async function exportSVG(selector){const target=findTarget(selector);if(!target||target.tagName!=='SVG'){toast('SVG export requires an SVG target');return;}try{const clone=target.cloneNode(true);const computed=getComputedStyle(document.documentElement);const vars=['--av-surface','--av-surface-alt','--av-text-primary','--av-text-secondary','--av-text-tertiary','--av-border','--av-accent','--av-chart-1','--av-chart-2','--av-chart-3','--av-chart-4','--av-chart-5','--av-chart-6'];let varCSS=':root{';vars.forEach(v=>{varCSS+=v+':'+computed.getPropertyValue(v).trim()+';';});varCSS+='}';let styleEl=clone.querySelector('style');if(!styleEl){styleEl=document.createElementNS('http://www.w3.org/2000/svg','style');clone.insertBefore(styleEl,clone.firstChild);}styleEl.textContent=varCSS+styleEl.textContent;const svgStr=new XMLSerializer().serializeToString(clone);const blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});download(blob,'archviz-'+Date.now()+'.svg');toast('SVG exported (with theme vars)');}catch(e){toast('SVG export failed: '+e.message);console.error(e);}}
+  async function copyToClipboard(selector){const target=findTarget(selector);if(!target){toast('No export target found');return;}try{const blob=await exportBlob(target,SCALE_DEFAULT,'image/png');if(navigator.clipboard&&window.ClipboardItem){await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);toast('Copied to clipboard (4× PNG)');}else{const reader=new FileReader();reader.onload=()=>{console.log('Clipboard fallback — data URL:',reader.result);};reader.readAsDataURL(blob);toast('Clipboard unavailable — data URL logged to console');}}catch(e){toast('Clipboard failed: '+e.message);console.error(e);}}
+  function createMenu(){const btn=document.createElement('button');btn.id='archviz-export-btn';btn.textContent='Export';btn.addEventListener('click',toggleMenu);const menu=document.createElement('div');menu.id='archviz-export-menu';menu.innerHTML='<button data-action="png">Export PNG <span class="shortcut">E→P</span></button><button data-action="svg">Export SVG <span class="shortcut">E→S</span></button><button data-action="webp">Export WebP <span class="shortcut">E→W</span></button><div class="sep"></div><button data-action="clipboard">Copy to Clipboard <span class="shortcut">E→C</span></button>';menu.addEventListener('click',(e)=>{const action=e.target.closest('button')?.dataset?.action;if(!action)return;closeMenu();if(action==='png')exportPNG();else if(action==='svg')exportSVG();else if(action==='webp')exportWebP();else if(action==='clipboard')copyToClipboard();});document.body.appendChild(btn);document.body.appendChild(menu);}
+  function toggleMenu(){const menu=document.getElementById('archviz-export-menu');if(menu)menu.classList.toggle('open');}
+  function closeMenu(){const menu=document.getElementById('archviz-export-menu');if(menu)menu.classList.remove('open');}
+  let pendingE=false;let pendingETimer=null;
+  document.addEventListener('keydown',(e)=>{if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.isContentEditable)return;if(e.target.tagName==='CANVAS'&&document.querySelector('canvas[data-orbit]'))return;const key=e.key.toLowerCase();if(key==='t'&&!e.metaKey&&!e.ctrlKey&&!e.altKey){e.preventDefault();window.archvizTheme?.toggleTheme();return;}if(key==='e'&&!e.metaKey&&!e.ctrlKey&&!e.altKey){e.preventDefault();if(pendingE){clearTimeout(pendingETimer);pendingE=false;return;}pendingE=true;toggleMenu();pendingETimer=setTimeout(()=>{pendingE=false;},800);return;}if(pendingE){clearTimeout(pendingETimer);pendingE=false;closeMenu();if(key==='p')exportPNG();else if(key==='s')exportSVG();else if(key==='w')exportWebP();else if(key==='c')copyToClipboard();return;}if(key==='escape')closeMenu();});
+  document.addEventListener('click',(e)=>{if(!e.target.closest('#archviz-export-menu')&&!e.target.closest('#archviz-export-btn'))closeMenu();});
+  window.archvizExport={exportPNG,exportSVG,exportWebP,copyToClipboard};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',createMenu);else createMenu();
+})();
+</script>
+</body>
+</html>

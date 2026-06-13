@@ -1,0 +1,218 @@
+<!-- archviz-skills upgrade Phase 1 | 2026-06-13 -->
+<!-- Theme System Module — paste into <head> of any archviz HTML template -->
+<!-- Provides: 4 palettes, prefers-color-scheme, runtime toggle, CSS vars -->
+<style id="archviz-theme-vars">
+/* === Palette: Warm Paper (default light) === */
+:root, [data-palette="warm-paper"] {
+  --av-surface: #f5f0eb;
+  --av-surface-alt: #e8e4e0;
+  --av-surface-raised: #faf9f5;
+  --av-text-primary: #1B365D;
+  --av-text-secondary: #5e5d59;
+  --av-text-tertiary: #87867f;
+  --av-border: #d6d3d1;
+  --av-accent: #002FA7;
+  --av-accent-soft: rgba(0,47,167,0.12);
+  --av-success: #3B6D11;
+  --av-warning: #854F0B;
+  --av-danger: #A32D2D;
+  --av-chart-1: #002FA7;
+  --av-chart-2: #94a3b8;
+  --av-chart-3: #a8a29e;
+  --av-chart-4: #d6d3d1;
+  --av-chart-5: #c96442;
+  --av-chart-6: #5e5d59;
+}
+
+/* === Palette: Swiss Neutral === */
+[data-palette="swiss-neutral"] {
+  --av-surface: #f8f8f6;
+  --av-surface-alt: #efeeec;
+  --av-surface-raised: #ffffff;
+  --av-text-primary: #1a1a18;
+  --av-text-secondary: #5f5e5a;
+  --av-text-tertiary: #88877f;
+  --av-border: #d9d8d4;
+  --av-accent: #185FA5;
+  --av-accent-soft: rgba(24,95,165,0.10);
+  --av-success: #3B6D11;
+  --av-warning: #854F0B;
+  --av-danger: #A32D2D;
+  --av-chart-1: #185FA5;
+  --av-chart-2: #0F6E56;
+  --av-chart-3: #534AB7;
+  --av-chart-4: #993C1D;
+  --av-chart-5: #854F0B;
+  --av-chart-6: #5F5E5A;
+}
+
+/* === Palette: Editorial Parchment === */
+[data-palette="editorial-parchment"] {
+  --av-surface: #f5f4ed;
+  --av-surface-alt: #e8e6dc;
+  --av-surface-raised: #faf9f5;
+  --av-text-primary: #141413;
+  --av-text-secondary: #5e5d59;
+  --av-text-tertiary: #87867f;
+  --av-border: #c9c7bc;
+  --av-accent: #c96442;
+  --av-accent-soft: rgba(201,100,66,0.12);
+  --av-success: #3B6D11;
+  --av-warning: #854F0B;
+  --av-danger: #A32D2D;
+  --av-chart-1: #c96442;
+  --av-chart-2: #5e5d59;
+  --av-chart-3: #87867f;
+  --av-chart-4: #b0aea5;
+  --av-chart-5: #141413;
+  --av-chart-6: #d6d3d1;
+}
+
+/* === Dark: IKB Dark === */
+[data-palette="ikb-dark"], [data-theme="dark"]:not([data-palette]) {
+  --av-surface: #1a1a2e;
+  --av-surface-alt: #252540;
+  --av-surface-raised: #2a2a45;
+  --av-text-primary: #e8e6de;
+  --av-text-secondary: #b4b2a9;
+  --av-text-tertiary: #888780;
+  --av-border: rgba(255,255,255,0.15);
+  --av-accent: #6B8AFF;
+  --av-accent-soft: rgba(107,138,255,0.15);
+  --av-success: #97C459;
+  --av-warning: #EF9F27;
+  --av-danger: #F09595;
+  --av-chart-1: #6B8AFF;
+  --av-chart-2: #5DCAA5;
+  --av-chart-3: #AFA9EC;
+  --av-chart-4: #F0997B;
+  --av-chart-5: #EF9F27;
+  --av-chart-6: #b4b2a9;
+}
+
+/* === System dark auto-detect (when no data-palette set) === */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-palette]):not([data-theme]) {
+    --av-surface: #1a1a2e;
+    --av-surface-alt: #252540;
+    --av-surface-raised: #2a2a45;
+    --av-text-primary: #e8e6de;
+    --av-text-secondary: #b4b2a9;
+    --av-text-tertiary: #888780;
+    --av-border: rgba(255,255,255,0.15);
+    --av-accent: #6B8AFF;
+    --av-accent-soft: rgba(107,138,255,0.15);
+    --av-success: #97C459;
+    --av-warning: #EF9F27;
+    --av-danger: #F09595;
+    --av-chart-1: #6B8AFF;
+    --av-chart-2: #5DCAA5;
+    --av-chart-3: #AFA9EC;
+    --av-chart-4: #F0997B;
+    --av-chart-5: #EF9F27;
+    --av-chart-6: #b4b2a9;
+  }
+}
+
+/* === Toggle button === */
+#archviz-theme-toggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 9999;
+  background: var(--av-surface-raised, #faf9f5);
+  border: 1px solid var(--av-border, #d6d3d1);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font: 12px/1 system-ui, -apple-system, sans-serif;
+  color: var(--av-text-secondary, #5e5d59);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  user-select: none;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+#archviz-theme-toggle:hover {
+  background: var(--av-surface-alt, #e8e4e0);
+  border-color: var(--av-text-tertiary, #87867f);
+}
+</style>
+
+<script>
+/* archviz-skills Theme System
+ * API:
+ *   applyPalette(name)  — set palette by name
+ *   toggleTheme()        — toggle light↔dark
+ *   getCurrentPalette()  — return current palette name
+ *   isDark()             — boolean
+ *   ARCHVIZ_PALETTES     — palette registry
+ */
+(function() {
+  'use strict';
+
+  const PALETTES = {
+    'warm-paper':          { label: 'Warm Paper',    mode: 'light' },
+    'swiss-neutral':       { label: 'Swiss Neutral',  mode: 'light' },
+    'editorial-parchment': { label: 'Editorial',      mode: 'light' },
+    'ikb-dark':            { label: 'IKB Dark',       mode: 'dark'  },
+  };
+
+  // Expose globally for export module
+  window.ARCHVIZ_PALETTES = PALETTES;
+
+  let currentPalette = 'warm-paper';
+
+  function applyPalette(name) {
+    if (!PALETTES[name]) return;
+    currentPalette = name;
+    const root = document.documentElement;
+    root.setAttribute('data-palette', name);
+    root.setAttribute('data-theme', PALETTES[name].mode);
+    localStorage.setItem('archviz-palette', name);
+    updateToggleLabel();
+  }
+
+  function toggleTheme() {
+    const order = ['warm-paper', 'swiss-neutral', 'editorial-parchment', 'ikb-dark'];
+    const idx = order.indexOf(currentPalette);
+    applyPalette(order[(idx + 1) % order.length]);
+  }
+
+  function getCurrentPalette() { return currentPalette; }
+  function isDark() { return PALETTES[currentPalette]?.mode === 'dark'; }
+
+  function updateToggleLabel() {
+    const btn = document.getElementById('archviz-theme-toggle');
+    if (btn) btn.textContent = PALETTES[currentPalette]?.label || currentPalette;
+  }
+
+  // Auto-init on DOMContentLoaded
+  function init() {
+    // Restore saved palette
+    const saved = localStorage.getItem('archviz-palette');
+    if (saved && PALETTES[saved]) {
+      applyPalette(saved);
+    } else {
+      // Respect system preference
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (prefersDark) applyPalette('ikb-dark');
+    }
+
+    // Create toggle button
+    const btn = document.createElement('button');
+    btn.id = 'archviz-theme-toggle';
+    btn.textContent = PALETTES[currentPalette]?.label || 'Theme';
+    btn.addEventListener('click', toggleTheme);
+    document.body.appendChild(btn);
+  }
+
+  // Expose API
+  window.archvizTheme = { applyPalette, toggleTheme, getCurrentPalette, isDark, init };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
