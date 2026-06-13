@@ -1,20 +1,18 @@
 ---
 name: archviz-3d
 description: |
-  3D spatial visualization skill for AI agents. Self-contained HTML with Three.js + animejs v4.
-  Use when the user asks for 3D building, floorplan, structure, spatial walkthrough, exploded view,
-  mechanical visualization, 3D archviz, 建筑3D, 结构可视化, 爆炸图, 空间漫游, 楼层导航,
-  or any brief mentioning "3D", "Three.js", "walkthrough", "exploded".
-  Default: do NOT enter 3D unless the brief explicitly mentions spatial/3D/building/mechanical.
-  For 2D diagrams (flowchart, architecture, data viz) → use archviz (2D infoviz).
-  For article illustrations / sketches → use archviz-sketch.
+  当用户需要建筑结构、楼层功能、机械爆炸图、空间剖面或交互式 3D 教学可视化（明确提到 3D/building/floorplan/structure/exploded/spatial/walkthrough/mechanical）时加载。
+  自包含 HTML（Three.js + animejs v4 CDN），零构建。
+  2D 流程图/信息可视化 → archviz。
+  手绘/生草图配图 → archviz-sketch。
+  超出自包含复杂度时引导切 Vite + R3F。
 license: MIT
 metadata:
-  version: 0.2.0
+  version: 0.3.0
   source: https://github.com/archsueh/archviz-3d
   risk: safe
   author: archsueh
-  triggers: 3d, three.js, building, floorplan, structure, walkthrough, exploded, archviz, 建筑, 结构, 爆炸图, 空间, 漫游, 楼层, mechanical, kinematics
+  triggers: 3d, three.js, building, floorplan, structure, walkthrough, exploded, 建筑3D, 结构可视化, 爆炸图, 空间漫游, 楼层导航, mechanical, kinematics, spatial
 ---
 
 # archviz-3d
