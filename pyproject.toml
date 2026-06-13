@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "archviz-3d"
+version = "0.2.0"
+description = "Three.js self-contained 3D visualization engine for AI agents"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.20"]
+
+[project.scripts]
+archviz3d = "archviz3d.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["archviz3d"]
