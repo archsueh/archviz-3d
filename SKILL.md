@@ -8,7 +8,7 @@ description: |
   超出自包含复杂度时引导切 Vite + R3F。
 license: MIT
 metadata:
-  version: 0.4.0
+  version: 0.5.0
   source: https://github.com/archsueh/archviz-3d
   risk: safe
   author: archsueh
@@ -44,8 +44,10 @@ metadata:
 
 ## Tech Stack
 
-- Three.js (CDN importmap, v0.170+)
-- animejs v4 (CDN, `dist/bundles/anime.esm.js`)
+| Path | Version |
+|---|---|
+| three.js | v0.170.0+ |
+| animejs | **v4.5.0** (added built-in Three.js adapter + 3D stagger) |
 - OrbitControls (Three.js addons)
 - Self-contained HTML (no build step, no npm)
 
@@ -57,11 +59,41 @@ metadata:
   "imports": {
     "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
     "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
-    "animejs": "https://cdn.jsdelivr.net/npm/animejs@4.4.1/dist/bundles/anime.esm.js"
+    "animejs": "https://cdn.jsdelivr.net/npm/animejs@4.5.0/dist/bundles/anime.esm.js",
+    "animejs/adapters/three": "https://cdn.jsdelivr.net/npm/animejs@4.5.0/dist/modules/adapters/three/index.js"
   }
 }
 </script>
 ```
+
+## Three.js Adapter (v4.5.0+)
+
+Import as a side-effect **after** `animejs` — registers itself globally so `animate()` can target Three.js objects directly.
+
+```js
+import { animate, stagger } from 'animejs';
+import 'animejs/adapters/three'; // side-effect: registers adapter
+
+// Animate any Object3D property:
+animate(mesh.position, { x: 5, y: 2, duration: 800, easing: 'easeOutCubic' });
+animate(mesh.rotation, { y: Math.PI, duration: 600 });
+animate(material, { opacity: 0, roughness: 0.2, duration: 500 });
+animate(light, { intensity: 3, duration: 1000 });
+animate(camera.position, { x: 10, y: 5, z: 15, duration: 1200 });
+
+// 3D stagger — floor-by-floor building reveal:
+animate(floorMeshes, {
+  position: { y: stagger(3, { grid: [1, floorMeshes.length, 1], from: 'first' }) },
+  opacity: stagger([0, 1], { grid: [1, floorMeshes.length, 1] }),
+  delay: stagger(120),
+  duration: 600,
+  easing: 'easeOutExpo',
+});
+```
+
+**What the adapter can target:** `Object3D` (position/rotation/scale), `Material` (opacity/roughness/metalness/color), `Light` (intensity/color), `Camera` (fov/position), `InstancedMesh`, `UniformNode` (TSL shaders).
+
+**Instance safety:** The adapter imports from `animejs` (same importmap entry as the bundle), so both share the same module instance — no duplicate registration.
 
 ## Key Gotchas
 
@@ -70,6 +102,7 @@ metadata:
 | animejs v4 path | `dist/bundles/anime.esm.js`, not v3's `lib/anime.es.js` |
 | animejs v4 API | `animate(target, props)`, not `anime({targets})` |
 | Function naming | NEVER name a function `animate` — shadows the import; use `renderLoop` or `tick` |
+| Three.js adapter | v4.5.0+ can animate Three.js targets natively: `animate(mesh.position, {x: 1})`; use `tween` wrapper only for non-Three targets |
 | Ground burial | Objects at y=0 bury into ground; offset to y=2+ or lower ground plane |
 | Camera transitions | Use tween, never direct `.set()` (causes instant jump) |
 | Max lights | 3 lights enforced for performance |
@@ -217,7 +250,26 @@ archviz-3d/
 
 **Integration:** Include full content inside `<script type="module">` (after THREE import), NOT as a separate non-module script.
 
-**Explode pattern:** Use baked vector lerp (`lerpVectors` + smoothstep) instead of per-frame animejs:
+**Explode pattern:** Two approaches — baked vector lerp (scrub-friendly, slider-driven) or animejs adapter (fire-and-forget, v4.5.0+):
+
+**Option A — baked lerp** (use when you need scrubbing / a range slider to control explode %):
+```js
+// Driven by a 0–1 value (e.g. slider), NOT time-based
+_updateExplode(t) { ... } // see lerp pattern below
+```
+
+**Option B — animejs adapter** (use when you want a one-shot "explode" animation on click):
+```js
+import 'animejs/adapters/three';
+parts.forEach((part, i) => {
+  animate(part.position, {
+    x: targetPositions[i].x, y: targetPositions[i].y, z: targetPositions[i].z,
+    duration: 800, delay: i * 60, easing: 'easeOutExpo',
+  });
+});
+```
+
+**Option A detail — baked vector lerp** (`lerpVectors` + smoothstep):
 
 ```js
 _updateExplode(t) {

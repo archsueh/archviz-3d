@@ -1,35 +1,39 @@
 <!--
   archviz-skills 3D CDN Dependencies Reference
   Copy this importmap block into any self-contained 3D HTML template.
-  Verified: 2026-06-11
-  
-  animejs v4.4.1 — API changed from v3:
+  Verified: 2026-06-23
+
+  animejs v4.5.0 — v4 API (unchanged from v4.4.x):
     v3: import anime from 'animejs'; anime({targets: obj, x: 1})
     v4: import { animate } from 'animejs'; animate(obj, {x: 1})
-  
-  Use the tween() wrapper below to avoid future breakage.
+
+  v4.5.0 new: Three.js adapter — lets animate() target Three.js objects directly.
+  Import 'animejs/adapters/three' as a side-effect (no named imports needed).
 -->
 <script type="importmap">
 {
   "imports": {
     "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
     "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
-    "animejs": "https://cdn.jsdelivr.net/npm/animejs@4.4.1/dist/bundles/anime.esm.js"
+    "animejs": "https://cdn.jsdelivr.net/npm/animejs@4.5.0/dist/bundles/anime.esm.js",
+    "animejs/adapters/three": "https://cdn.jsdelivr.net/npm/animejs@4.5.0/dist/modules/adapters/three/index.js"
   }
 }
 </script>
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { animate } from 'animejs';
+import { animate, stagger } from 'animejs';
+import 'animejs/adapters/three'; // registers Three.js adapter globally
 
-// animejs v4 wrapper — use this instead of calling animate() directly
+// With adapter active, animate() works on Three.js objects:
+// animate(mesh.position, { x: 5, duration: 800, easing: 'easeOutCubic' });
+// animate(material, { opacity: 0, roughness: 0.2, duration: 500 });
+// animate(light, { intensity: 2, duration: 1000 });
+// animate(camera.position, { x: 10, y: 5, z: 15, duration: 1200 });
+
+// For DOM/non-Three targets, use the tween() wrapper as before:
 function tween(target, props) { return animate(target, props); }
-
-// Usage:
-// tween(camera.position, {x: 6, y: 4, z: 8, duration: 800, easing: 'easeInOutCubic'});
-// tween(obj.position, {z: -3, duration: 1000, delay: 200});
-// tween(obj.rotation, {y: Math.PI, duration: 600});
 
 // ⚠️ Do NOT name any function 'animate' — it shadows the animejs import
 // ⚠️ Objects at y=0 will be buried in the ground plane — offset to y=2+
