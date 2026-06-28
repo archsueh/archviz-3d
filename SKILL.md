@@ -318,3 +318,61 @@ Full MCP architecture: see `sankey-rendering` skill → `references/mcp-architec
 - Baked vector lerp explode
 - Offscreen canvas thumbnails
 - Engineering hygiene (single renderer, dpr cap, dispose)
+
+---
+
+## 交叉优化：3D × Animate (Explosion Animation)
+
+**功能：** 将 3D 爆炸图数据转换为动画 GIF
+
+**脚本：** `scripts/render_3d_explosion.py`
+
+**数据格式：**
+```json
+{
+  "title": "Product Exploded View",
+  "subtitle": "Assembly breakdown",
+  "width": 800,
+  "height": 600,
+  "parts": [
+    {
+      "name": "Top Cover",
+      "x": 0,
+      "y": -80,
+      "z": 0,
+      "width": 120,
+      "height": 40,
+      "depth": 15,
+      "explode_x": 0,
+      "explode_y": -100,
+      "explode_z": 50
+    }
+  ]
+}
+```
+
+**渲染命令：**
+```bash
+python3 scripts/render_3d_explosion.py \
+  --spec explosion-spec.json \
+  --outdir ./output \
+  --basename explosion-name \
+  --frames 30 \
+  --fps 15
+```
+
+**参数：**
+- `--frames`: 帧数（默认 30）
+- `--fps`: 帧率（默认 15）
+
+**输出：**
+- `explosion-name.gif` — 爆炸动画
+- `explosion-name.png` — 静态爆炸图
+
+**动画效果：**
+- 零件从中心向外爆炸
+- ease-in-out 缓动函数
+- 连接线淡入
+- 3D 深度模拟
+
+---

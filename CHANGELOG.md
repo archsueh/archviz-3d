@@ -7,10 +7,15 @@
 - `animejs/adapters/three` importmap entry in both SKILL.md and `_archviz-deps.html`
 - New "Three.js Adapter" section in SKILL.md with usage patterns for Object3D, Material, Light, Camera
 - 3D stagger pattern for floor-by-floor building reveals (`grid: [cols, rows, depth]`)
+- Implemented a staggered floor-by-floor entry reveal animation utilizing 3D stagger in `threejs-floorplan.html` and `threejs-archviz.html`
+- Added support for `isExploded` and `isWireframe` startup parameters injected by the server in `threejs-archviz.html`
 
 ### Changed
 - animejs CDN bumped from v4.4.1 → v4.5.0 in importmap + `_archviz-deps.html`
 - Explode pattern section updated: Option A (baked lerp, scrub-friendly) vs Option B (animejs adapter, fire-and-forget)
+- Refactored `threejs-floorplan.html` and `threejs-archviz.html` templates, as well as `teaching-building-3d.html` and `hair-dryer-exploded.html` examples, to use `animejs@4.5.0` and register the Three.js adapter
+- Unified `threejs-archviz.html` with the `ArchVizBuild` contract (supporting explode views, wireframe toggles, renderer/scene/light factories)
+- Fixed a renderLoop crash in `threejs-archviz.html` caused by the local `animate` loop shadowing the animejs `animate` import
 - Metadata version bumped to 0.5.0
 - `_archviz-deps.html` verified date updated to 2026-06-23
 

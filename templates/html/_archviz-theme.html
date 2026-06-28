@@ -201,6 +201,7 @@
     'swiss-modernist':     { label: 'Swiss Modernist',mode: 'light' },
     'vignelli-canon':      { label: 'Vignelli Canon', mode: 'light' },
     'ikb-dark':            { label: 'IKB Dark',       mode: 'dark'  },
+    'auto-time':           { label: 'Auto (Time)',    mode: 'auto'  }
   };
 
   // Expose globally for export module
@@ -212,20 +213,40 @@
     if (!PALETTES[name]) return;
     currentPalette = name;
     const root = document.documentElement;
-    root.setAttribute('data-palette', name);
-    root.setAttribute('data-theme', PALETTES[name].mode);
+    let resolvedPalette = name;
+    let activeMode = PALETTES[name].mode;
+
+    if (name === 'auto-time') {
+      const hours = new Date().getHours();
+      const isDaytime = hours >= 6 && hours < 18;
+      resolvedPalette = isDaytime ? 'editorial-parchment' : 'ikb-dark';
+      activeMode = isDaytime ? 'light' : 'dark';
+      root.setAttribute('data-palette-selection', 'auto-time');
+    } else {
+      root.removeAttribute('data-palette-selection');
+    }
+
+    root.setAttribute('data-palette', resolvedPalette);
+    root.setAttribute('data-theme', activeMode);
     localStorage.setItem('archviz-palette', name);
     updateToggleLabel();
+    window.dispatchEvent(new Event('archviz-theme-changed'));
   }
 
   function toggleTheme() {
-    const order = ['warm-paper', 'swiss-neutral', 'editorial-parchment', 'swiss-modernist', 'vignelli-canon', 'ikb-dark'];
+    const order = ['warm-paper', 'swiss-neutral', 'editorial-parchment', 'swiss-modernist', 'vignelli-canon', 'ikb-dark', 'auto-time'];
     const idx = order.indexOf(currentPalette);
     applyPalette(order[(idx + 1) % order.length]);
   }
 
   function getCurrentPalette() { return currentPalette; }
-  function isDark() { return PALETTES[currentPalette]?.mode === 'dark'; }
+  function isDark() {
+    if (currentPalette === 'auto-time') {
+      const hours = new Date().getHours();
+      return !(hours >= 6 && hours < 18);
+    }
+    return PALETTES[currentPalette]?.mode === 'dark';
+  }
 
   function updateToggleLabel() {
     const btn = document.getElementById('archviz-theme-toggle');
@@ -239,9 +260,7 @@
     if (saved && PALETTES[saved]) {
       applyPalette(saved);
     } else {
-      // Respect system preference
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      if (prefersDark) applyPalette('ikb-dark');
+      applyPalette('auto-time');
     }
 
     // Create toggle button
@@ -250,6 +269,19 @@
     btn.textContent = PALETTES[currentPalette]?.label || 'Theme';
     btn.addEventListener('click', toggleTheme);
     document.body.appendChild(btn);
+
+    // Periodically update theme if auto-time
+    setInterval(function() {
+      if (currentPalette === 'auto-time') {
+        const hours = new Date().getHours();
+        const isDaytime = hours >= 6 && hours < 18;
+        const resolvedPalette = isDaytime ? 'editorial-parchment' : 'ikb-dark';
+        const root = document.documentElement;
+        if (root.getAttribute('data-palette') !== resolvedPalette) {
+          applyPalette('auto-time');
+        }
+      }
+    }, 60000);
   }
 
   // Expose API

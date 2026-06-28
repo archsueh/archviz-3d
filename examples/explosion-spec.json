@@ -1,0 +1,68 @@
+{
+  "title": "Product Exploded View",
+  "subtitle": "Assembly breakdown",
+  "width": 800,
+  "height": 600,
+  "parts": [
+    {
+      "name": "Top Cover",
+      "x": 0,
+      "y": -80,
+      "z": 0,
+      "width": 120,
+      "height": 40,
+      "depth": 15,
+      "explode_x": 0,
+      "explode_y": -100,
+      "explode_z": 50
+    },
+    {
+      "name": "Display",
+      "x": 0,
+      "y": -40,
+      "z": 10,
+      "width": 100,
+      "height": 30,
+      "depth": 10,
+      "explode_x": 0,
+      "explode_y": -50,
+      "explode_z": 80
+    },
+    {
+      "name": "Main Body",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "width": 140,
+      "height": 60,
+      "depth": 20,
+      "explode_x": 0,
+      "explode_y": 0,
+      "explode_z": 0
+    },
+    {
+      "name": "Battery",
+      "x": -30,
+      "y": 40,
+      "z": -10,
+      "width": 60,
+      "height": 30,
+      "depth": 15,
+      "explode_x": -80,
+      "explode_y": 60,
+      "explode_z": -30
+    },
+    {
+      "name": "Sensor",
+      "x": 30,
+      "y": 40,
+      "z": 10,
+      "width": 40,
+      "height": 25,
+      "depth": 10,
+      "explode_x": 80,
+      "explode_y": 60,
+      "explode_z": 50
+    }
+  ]
+}

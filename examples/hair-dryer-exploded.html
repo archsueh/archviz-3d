@@ -86,14 +86,16 @@
   "imports": {
     "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
     "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
-    "animejs": "https://cdn.jsdelivr.net/npm/animejs@4.4.1/dist/bundles/anime.esm.js"
+    "animejs": "https://cdn.jsdelivr.net/npm/animejs@4.5.0/dist/bundles/anime.esm.js",
+    "animejs/adapters/three": "https://cdn.jsdelivr.net/npm/animejs@4.5.0/dist/modules/adapters/three/index.js"
   }
 }
 </script>
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { animate } from 'animejs';
+import { animate, stagger } from 'animejs';
+import 'animejs/adapters/three';
 
 // === Tokens ===
 const C = {
