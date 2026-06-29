@@ -318,6 +318,29 @@ Full MCP architecture: see `sankey-rendering` skill → `references/mcp-architec
 - Baked vector lerp explode
 - Offscreen canvas thumbnails
 - Engineering hygiene (single renderer, dpr cap, dispose)
+- WebGPU + TSL GPGPU strand simulation (ref: [Collective Trajectories](https://github.com/jeonghopark/Collective-Trajectories) — `~/Developer/collective-trajectories/`)
+
+---
+
+## 技术参考：WebGPU + TSL GPGPU
+
+来源：[Collective Trajectories](https://github.com/jeonghopark/Collective-Trajectories) (jeonghopark · CC BY-NC 4.0)
+
+**本地路径：** `~/Developer/collective-trajectories/`  
+**构建：** `pnpm install && pnpm build` → `dist/`  
+**运行：** `cd dist && python3 -m http.server 8768`
+
+**核心技术栈：**
+- Three.js `^0.184.0` — `three/webgpu` + `three/tsl`
+- GPGPU compute: `Fn(...).compute()` → `StorageBufferAttribute`
+- 每帧在 GPU 上计算粒子位置/亮度，CPU 零负担
+
+**适用场景：**
+- 大规模粒子/strand 模拟（100–5000 条）
+- 实时 curl noise 变形
+- U-shaped 亮度包络 + 脉冲流
+- 球面波纹 + 音频响应
+- 深度线索（雾/DoF/遮挡）
 
 ---
 
