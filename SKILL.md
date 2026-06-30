@@ -8,7 +8,7 @@ description: |
   超出自包含复杂度时引导切 Vite + R3F。
 license: MIT
 metadata:
-  version: 0.5.0
+  version: 0.6.0
   source: https://github.com/archsueh/archviz-3d
   risk: safe
   author: archsueh
@@ -21,11 +21,20 @@ metadata:
 
 ## When to Use
 
+**Tier A — Three.js procedural (self-contained HTML, default)**
 - Building structure visualization (envelope, column grid, floor slabs)
 - Floor plan navigation (multi-floor, section cut)
 - Product exploded views (assembly/disassembly)
 - Mechanical system visualization (kinematics, gears, engines)
 - Spatial walkthrough (camera orbit, preset views)
+
+**Tier B — Blender Python → glTF (project-directory mode)**
+- Complex parametric geometry: real walls with thickness, stairs, curved/irregular structures
+- Triggers: "真实墙体" / "楼梯" / "异形结构" / "参数化建筑" / "precise geometry"
+
+**Tier C — Hyper3D AI model → glTF (project-directory mode)**
+- Realistic organic/product models: furniture, vegetation, mechanical parts, detailed facades
+- Triggers: "家具" / "植被" / "写实" / "realistic" / "furniture" / "detailed model"
 
 ## When NOT to Use
 
@@ -35,21 +44,154 @@ metadata:
 
 ## Skill Boundaries
 
-| Need | Use |
-|---|---|
-| 2D diagram/chart/card | archviz (2D infoviz) |
-| 3D building/structure | **this skill** |
-| Sketch/illustration | archviz-sketch |
-| Full interactive 3D app | Vite + R3F (not self-contained) |
+| Need | Use | Output mode |
+|---|---|---|
+| 2D diagram/chart/card | archviz (2D infoviz) | — |
+| 3D structural / exploded / walkthrough | **this skill — Tier A** | self-contained HTML |
+| Complex parametric geometry (walls/stairs) | **this skill — Tier B** | project-directory |
+| Realistic models (furniture/vegetation) | **this skill — Tier C** | project-directory |
+| Sketch/illustration | archviz-sketch | — |
+| Full interactive 3D app with build step | Vite + R3F | — |
+
+**Output mode decision:**
+```
+need realistic/complex models?
+  YES → project-directory: index.html + assets/*.glb
+  NO  → self-contained: single .html file (default)
+```
 
 ## Tech Stack
 
-| Path | Version |
-|---|---|
-| three.js | v0.170.0+ |
-| animejs | **v4.5.0** (added built-in Three.js adapter + 3D stagger) |
+| Path | Version | Tier |
+|---|---|---|
+| three.js | v0.170.0+ | A / B / C |
+| animejs | **v4.5.0** (built-in Three.js adapter + 3D stagger) | A / B / C |
+| GLTFLoader | three/addons/loaders/GLTFLoader.js | B / C |
+| SVG overlay | inline (no library) — use `_archviz-svg-overlay.html` | A |
+| Blender MCP | `mcp__blender__execute_blender_code` / `generate_hyper3d_model_via_text` | B / C |
+
 - OrbitControls (Three.js addons)
-- Self-contained HTML (no build step, no npm)
+- Tier A: Self-contained HTML (no build step, no npm)
+- Tier B/C: Project-directory mode (`index.html` + `assets/*.glb`)
+
+## Blender MCP Workflow (Tier B / C)
+
+> Requires Blender running with MCP addon. Tool prefix: `mcp__blender__`.
+
+### Tier B — Parametric geometry via Blender Python
+
+```python
+# 1. Build geometry in Blender
+mcp__blender__execute_blender_code(code="""
+import bpy, bmesh
+bpy.ops.mesh.primitive_cube_add(size=1)
+obj = bpy.context.active_object
+obj.name = "Wall_A"
+obj.scale = (8, 0.3, 3)   # 8m wide, 30cm thick, 3m tall
+bpy.ops.object.transform_apply(scale=True)
+""")
+
+# 2. Preview
+mcp__blender__get_viewport_screenshot()
+
+# 3. Export glTF
+mcp__blender__execute_blender_code(code="""
+import bpy
+bpy.ops.export_scene.gltf(
+    filepath="/path/to/project/assets/scene.glb",
+    export_format='GLB',
+    export_apply=True,
+)
+""")
+```
+
+### Tier C — AI model via Hyper3D
+
+```python
+# 1. Generate model from text
+mcp__blender__generate_hyper3d_model_via_text(
+    text_prompt="modern minimalist sofa, white fabric, wooden legs",
+    bbox_condition=[2.0, 0.9, 0.8]   # L×W×H ratio
+)
+
+# 2. Import into scene (use task_uuid from step 1)
+mcp__blender__import_generated_asset(name="sofa", task_uuid="<uuid>")
+
+# 3. Position + export
+mcp__blender__execute_blender_code(code="""
+import bpy
+obj = bpy.data.objects["sofa"]
+obj.location = (0, 0, 0)
+bpy.ops.export_scene.gltf(
+    filepath="/path/to/project/assets/sofa.glb",
+    export_format='GLB', export_apply=True,
+)
+""")
+```
+
+### Three.js side — GLTFLoader template
+
+```html
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const loader = new GLTFLoader();
+loader.load('./assets/scene.glb', (gltf) => {
+  scene.add(gltf.scene);
+  // Blender materials, hierarchy, and animations are preserved
+}, undefined, (err) => console.error('GLTFLoader error:', err));
+</script>
+```
+
+### Constraints
+
+| Rule | Reason |
+|---|---|
+| Export path must be absolute in Blender Python | Blender resolves relative paths from its own CWD |
+| `export_apply=True` | Applies modifiers + transforms before export |
+| ≤ 2MB .glb for base64 embed | Larger files must stay as external references |
+| Run `get_viewport_screenshot` before export | Catch geometry errors visually |
+
+---
+
+## SVG Annotation Overlay
+
+Use `_archviz-svg-overlay.html` when the 3D scene needs 2D text labels anchored to world positions.
+
+```
+Keyword triggers → add SVG overlay:
+  "标注楼层" / "标注零件" / "显示数据" / "标注面积"
+  "label" / "annotate" / "data overlay" / "floor label"
+  "点击显示信息" / "click to show info"
+
+Pure Three.js (no overlay needed):
+  pure walkthrough / structural visualization / animation-only
+```
+
+```js
+// detectAnnotationNeed — call before choosing template
+function detectAnnotationNeed(request) {
+  const annotationKw = ['标注', '标签', 'label', 'annotate', '面积', '楼层名', 'data overlay', '信息面板'];
+  return annotationKw.some(k => request.includes(k));
+}
+
+// Template selection
+const useOverlay = detectAnnotationNeed(userRequest);
+// useOverlay=true  → threejs-archviz.html + _archviz-svg-overlay.html
+// useOverlay=false → threejs-archviz.html alone
+```
+
+**Gotcha:** SVG layer must be `pointer-events: none` — otherwise it blocks OrbitControls mouse events. The `AnnotationLayer` class in the template handles this automatically.
 
 ## CDN Importmap (verified)
 
@@ -223,18 +365,26 @@ archviz-3d/
 ├── SKILL.md              # This file — routing + gotchas
 ├── README.md             # GitHub overview
 ├── templates/html/
-│   ├── _archviz-theme.html    # Shared theme system (from archviz)
-│   ├── _archviz-export.html   # Shared export system (from archviz)
-│   ├── _archviz-deps.html     # CDN importmap reference
-│   ├── _archviz-3d-contract.html  # ArchVizBuild contract
-│   ├── threejs-archviz.html   # Building structure visualization
-│   └── threejs-floorplan.html # Floor plan navigation
+│   ├── _archviz-theme.html       # Shared theme system (from archviz)
+│   ├── _archviz-export.html      # Shared export system (from archviz)
+│   ├── _archviz-deps.html        # CDN importmap reference
+│   ├── _archviz-3d-contract.html # ArchVizBuild contract
+│   ├── _archviz-svg-overlay.html # SVG annotation layer (AnnotationLayer class)
+│   ├── _archviz-gltf.html        # GLTFLoader template (Tier B/C)  ← NEW
+│   ├── threejs-archviz.html      # Building structure visualization (Tier A)
+│   └── threejs-floorplan.html    # Floor plan navigation (Tier A)
 ├── examples/
 │   ├── teaching-building-3d.html
 │   └── hair-dryer-exploded.html
+│   └── living-room-gltf/         # Tier C example: Hyper3D sofa + GLTFLoader ← NEW
+│       ├── index.html
+│       └── assets/sofa.glb
 └── references/
     └── (Phase 3: kinematics-formulas.md, performance-hygiene.md, mechlab-contract.md)
 ```
+
+**Tier A output:** single `.html` file (self-contained)
+**Tier B/C output:** project directory with `index.html` + `assets/*.glb`
 
 ## ArchVizBuild Contract
 
