@@ -1,0 +1,227 @@
+<!--
+  archviz-svg-overlay | 2026-06-29
+  SVG annotation layer for Three.js scenes.
+  Paste this block AFTER the canvas element, inside the same <script type="module">.
+
+  Use when: you need 2D labels/arrows pinned to 3D world positions
+    - Floor labels on building visualization
+    - Part names on exploded views
+    - Data readouts (area, height) anchored to geometry
+    - Click-to-annotate: show detail panel at 3D hit point
+
+  Do NOT use pointer-events on the SVG layer — it will block OrbitControls.
+-->
+
+<!-- 1. Container markup — insert after <canvas id="archviz-canvas"> -->
+<!--
+<div id="archviz-canvas-wrap" style="position:relative;width:100%;height:100%;">
+  <canvas id="archviz-canvas"></canvas>
+  <div id="av-svg-layer" aria-hidden="true"></div>
+</div>
+-->
+
+<style>
+#av-svg-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none; /* never block OrbitControls */
+  overflow: hidden;
+}
+#av-svg-layer svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+/* Label bubbles — use existing --av-* palette */
+.av-label {
+  font: 11px/1.4 system-ui, -apple-system, sans-serif;
+  fill: var(--av-text-primary, #1B365D);
+}
+.av-label-bg {
+  fill: var(--av-surface-raised, #faf9f5);
+  stroke: var(--av-border, #d6d3d1);
+  stroke-width: 1;
+  rx: 4;
+}
+.av-connector {
+  stroke: var(--av-accent, #002FA7);
+  stroke-width: 1;
+  fill: none;
+  stroke-dasharray: 4 3;
+  opacity: 0.6;
+}
+.av-dot {
+  fill: var(--av-accent, #002FA7);
+}
+</style>
+
+<script type="module">
+/* ── AnnotationLayer ──────────────────────────────────────────
+   Usage inside your main <script type="module"> after scene setup:
+
+     const labels = new AnnotationLayer('av-svg-layer', camera, renderer);
+     labels.add('floor-1', floor1Mesh.position, 'B1F 地下层');
+     labels.add('floor-2', floor2Mesh.position, '1F 门厅');
+
+     // In render loop:
+     function tick() {
+       requestAnimationFrame(tick);
+       controls.update();
+       renderer.render(scene, camera);
+       labels.update();     // ← one line
+     }
+
+   Labels auto-hide when the anchor is behind the camera.
+──────────────────────────────────────────────────────────────── */
+
+class AnnotationLayer {
+  constructor(containerId, camera, renderer) {
+    this.camera   = camera;
+    this.renderer = renderer;
+    this._items   = new Map(); // id → { worldPos, text, el, line, dot }
+
+    const wrap = document.getElementById(containerId);
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    wrap.appendChild(svg);
+    this._svg = svg;
+  }
+
+  /** worldPos: THREE.Vector3 | {x,y,z} */
+  add(id, worldPos, text, opts = {}) {
+    const { offsetX = 30, offsetY = -20 } = opts;
+
+    // connector line
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.classList.add('av-connector');
+
+    // anchor dot
+    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    dot.classList.add('av-dot');
+    dot.setAttribute('r', '3');
+
+    // label background rect
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.classList.add('av-label-bg');
+
+    // label text
+    const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    txt.classList.add('av-label');
+    txt.textContent = text;
+
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.setAttribute('data-av-id', id);
+    g.appendChild(line);
+    g.appendChild(dot);
+    g.appendChild(rect);
+    g.appendChild(txt);
+    this._svg.appendChild(g);
+
+    this._items.set(id, {
+      worldPos: { x: worldPos.x, y: worldPos.y, z: worldPos.z },
+      text,
+      offsetX,
+      offsetY,
+      g, line, dot, rect, txt,
+    });
+  }
+
+  remove(id) {
+    const item = this._items.get(id);
+    if (item) { item.g.remove(); this._items.delete(id); }
+  }
+
+  /** Call once per frame after renderer.render() */
+  update() {
+    const W = this.renderer.domElement.clientWidth;
+    const H = this.renderer.domElement.clientHeight;
+
+    for (const [, item] of this._items) {
+      const { worldPos, offsetX, offsetY, g, line, dot, rect, txt } = item;
+
+      const s = this._project(worldPos, W, H);
+
+      if (!s.visible) {
+        g.style.display = 'none';
+        continue;
+      }
+      g.style.display = '';
+
+      const lx = s.x + offsetX;
+      const ly = s.y + offsetY;
+
+      // size text to fit rect
+      const tw = txt.textContent.length * 6.5 + 12;
+      const th = 18;
+
+      dot.setAttribute('cx', s.x);
+      dot.setAttribute('cy', s.y);
+
+      line.setAttribute('x1', s.x);
+      line.setAttribute('y1', s.y);
+      line.setAttribute('x2', lx + tw / 2);
+      line.setAttribute('y2', ly + th / 2);
+
+      rect.setAttribute('x', lx);
+      rect.setAttribute('y', ly);
+      rect.setAttribute('width', tw);
+      rect.setAttribute('height', th);
+
+      txt.setAttribute('x', lx + tw / 2);
+      txt.setAttribute('y', ly + th / 2 + 1);
+      txt.setAttribute('text-anchor', 'middle');
+      txt.setAttribute('dominant-baseline', 'middle');
+    }
+  }
+
+  /** Project world position → SVG pixel coords. Returns {x, y, visible}. */
+  _project(pos, W, H) {
+    const v = new THREE.Vector3(pos.x, pos.y, pos.z);
+    v.project(this.camera);
+
+    // z > 1 means behind near plane (clipped)
+    const visible = v.z <= 1;
+    return {
+      x: (v.x *  0.5 + 0.5) * W,
+      y: (v.y * -0.5 + 0.5) * H,
+      visible,
+    };
+  }
+
+  /** Remove all labels */
+  clear() {
+    for (const id of this._items.keys()) this.remove(id);
+  }
+}
+
+// Expose for use in parent module scope
+window.AnnotationLayer = AnnotationLayer;
+</script>
+
+<!-- ── Quick usage example (delete in production) ──
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const canvas   = document.getElementById('archviz-canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const scene    = new THREE.Scene();
+const camera   = new THREE.PerspectiveCamera(60, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
+camera.position.set(10, 8, 12);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+
+// Annotate floor slabs
+const labels = new AnnotationLayer('av-svg-layer', camera, renderer);
+labels.add('b1', { x: 0, y: -3, z: 0 }, 'B1F 地下停车');
+labels.add('l1', { x: 0, y:  0, z: 0 }, '1F 大堂入口');
+labels.add('l2', { x: 0, y:  3, z: 0 }, '2F 办公层');
+
+function tick() {
+  requestAnimationFrame(tick);
+  controls.update();
+  renderer.render(scene, camera);
+  labels.update(); // ← sync SVG to 3D every frame
+}
+tick();
+</script>
+-->
