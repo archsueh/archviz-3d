@@ -2,7 +2,7 @@
 """
 3D Exploded View Animation Renderer.
 Simulates 3D explosion effect using Pillow.
-Cross-optimization: archviz-3d + archviz-animation
+Cross-optimization: archviz-3d + archviz-animated
 """
 import argparse
 import json
