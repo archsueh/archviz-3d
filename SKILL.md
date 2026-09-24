@@ -19,6 +19,8 @@ metadata:
 
 > 3D spatial visualization — self-contained HTML, zero build step, CDN importmap.
 
+> **视觉规范**：3D 输出的结构线 / 楼板 / 强调色等 token 定义在 **archviz-skills 共享设计系统**（`archviz-diagram` 的 `DESIGN.md`，见其 §Extended: 3D Architectural Visualization）。深色工程语境可对齐第四套视觉语言 **Technical Blueprint**（navy `#0d1b2a` + cyan `#5fd0e8`）。
+
 ## When to Use
 
 **Tier A — Three.js procedural (self-contained HTML, default)**
