@@ -8,7 +8,7 @@ description: |
   超出自包含复杂度时引导切 Vite + R3F。
 license: MIT
 metadata:
-  version: 0.6.1
+  version: 0.6.2
   source: https://github.com/archsueh/archviz-3d
   risk: safe
   author: archsueh
@@ -458,12 +458,34 @@ Two hard requirements, both of which were silently violated until v0.6.1:
    Export button simply never appeared, with one `SyntaxError` as the only
    clue.
 
-⚠️ **This repo has no sync script and no CI.** `_archviz-theme.html` and
-`_archviz-export.html` are stale forks of archviz-diagram's modules (last
-touched 2026-06-13; the theme partial still advertises "4 palettes" where
-archviz-diagram now ships 11). The two templates additionally carry their own
-minified inline copies, so a single export fix has to be applied in three
-places. Re-syncing the partials is an open decision — see `CHANGELOG.md`.
+✅ **Partials re-synced to archviz-diagram (2026-09-30, v0.6.2).**
+`_archviz-theme.html` and `_archviz-export.html` are now byte-identical to
+archviz-diagram's modules, and this repo carries the same two maintenance
+scripts — **run both after editing either partial**:
+
+```sh
+python3 scripts/sync_theme.py && python3 scripts/sync_export.py
+```
+
+Both fail loudly (non-zero) if a template is missing its anchor, so a silent
+skip is no longer possible. The templates no longer hold hand-minified inline
+copies — their theme block and export block are generated from the partials.
+
+Two consequences worth knowing:
+
+1. **The theme block moved.** It used to be split — palette CSS inside the
+   head's shared `<style>`, theme JS in a separate `<script>` near the end.
+   `sync_theme.py` requires the block to be contiguous between
+   `<style id="archviz-theme-vars">` and the first `</script>`, so both
+   templates now carry the whole block (CSS + JS) as one unit in `<head>`.
+2. **The registry went 7 → 11 palettes** (adds `still-paper`, `signal-proof`,
+   `bridge-canvas`, `blueprint`). `README.md` and this file previously
+   advertised 4 — that number had been stale since long before.
+
+⚠️ **Still no CI.** Nothing enforces the sync; run the two scripts manually
+before committing, and check `git diff` afterwards.
+
+**Don't hardcode the palette count anywhere.** Point at `ARCHVIZ_PALETTES`.
 
 ## Dials (inherited from archviz-diagram)
 

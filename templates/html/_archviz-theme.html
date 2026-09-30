@@ -1,296 +1,430 @@
 <!-- archviz-skills upgrade Phase 1 | 2026-06-13 -->
 <!-- Theme System Module — paste into <head> of any archviz HTML template -->
-<!-- Provides: 4 palettes, prefers-color-scheme, runtime toggle, CSS vars -->
+<!-- Provides: the palette registry (see ARCHVIZ_PALETTES below — don't hardcode the count), prefers-color-scheme, runtime toggle, CSS vars -->
 <style id="archviz-theme-vars">
-/* === Palette: Warm Paper (default light) === */
-:root, [data-palette="warm-paper"] {
-  --av-surface: #f5f0eb;
-  --av-surface-alt: #e8e4e0;
-  --av-surface-raised: #faf9f5;
-  --av-text-primary: #1B365D;
-  --av-text-secondary: #5e5d59;
-  --av-text-tertiary: #87867f;
-  --av-border: #d6d3d1;
-  --av-accent: #002FA7;
-  --av-accent-soft: rgba(0,47,167,0.12);
-  --av-success: #3B6D11;
-  --av-warning: #854F0B;
-  --av-danger: #A32D2D;
-  --av-chart-1: #002FA7;
-  --av-chart-2: #94a3b8;
-  --av-chart-3: #a8a29e;
-  --av-chart-4: #d6d3d1;
-  --av-chart-5: #c96442;
-  --av-chart-6: #5e5d59;
-}
+  /* === Palette: Warm Paper (default light) === */
+  :root,
+  [data-palette="warm-paper"] {
+    --av-surface: #f5f0eb;
+    --av-surface-alt: #e8e4e0;
+    --av-surface-raised: #faf9f5;
+    --av-text-primary: #1b365d;
+    --av-text-secondary: #5e5d59;
+    --av-text-tertiary: #87867f;
+    --av-border: #d6d3d1;
+    --av-accent: #002fa7;
+    --av-accent-soft: rgba(0, 47, 167, 0.12);
+    --av-success: #3b6d11;
+    --av-warning: #854f0b;
+    --av-danger: #a32d2d;
+    --av-chart-1: #002fa7;
+    --av-chart-2: #94a3b8;
+    --av-chart-3: #a8a29e;
+    --av-chart-4: #d6d3d1;
+    --av-chart-5: #c96442;
+    --av-chart-6: #5e5d59;
+  }
 
-/* === Palette: Swiss Neutral === */
-[data-palette="swiss-neutral"] {
-  --av-surface: #f8f8f6;
-  --av-surface-alt: #efeeec;
-  --av-surface-raised: #ffffff;
-  --av-text-primary: #1a1a18;
-  --av-text-secondary: #5f5e5a;
-  --av-text-tertiary: #88877f;
-  --av-border: #d9d8d4;
-  --av-accent: #185FA5;
-  --av-accent-soft: rgba(24,95,165,0.10);
-  --av-success: #3B6D11;
-  --av-warning: #854F0B;
-  --av-danger: #A32D2D;
-  --av-chart-1: #185FA5;
-  --av-chart-2: #0F6E56;
-  --av-chart-3: #534AB7;
-  --av-chart-4: #993C1D;
-  --av-chart-5: #854F0B;
-  --av-chart-6: #5F5E5A;
-}
+  /* === Palette: Swiss Neutral === */
+  [data-palette="swiss-neutral"] {
+    --av-surface: #f8f8f6;
+    --av-surface-alt: #efeeec;
+    --av-surface-raised: #ffffff;
+    --av-text-primary: #1a1a18;
+    --av-text-secondary: #5f5e5a;
+    --av-text-tertiary: #88877f;
+    --av-border: #d9d8d4;
+    --av-accent: #185fa5;
+    --av-accent-soft: rgba(24, 95, 165, 0.1);
+    --av-success: #3b6d11;
+    --av-warning: #854f0b;
+    --av-danger: #a32d2d;
+    --av-chart-1: #185fa5;
+    --av-chart-2: #0f6e56;
+    --av-chart-3: #534ab7;
+    --av-chart-4: #993c1d;
+    --av-chart-5: #854f0b;
+    --av-chart-6: #5f5e5a;
+  }
 
-/* === Palette: Editorial Parchment === */
-[data-palette="editorial-parchment"] {
-  --av-surface: #f5f4ed;
-  --av-surface-alt: #e8e6dc;
-  --av-surface-raised: #faf9f5;
-  --av-text-primary: #141413;
-  --av-text-secondary: #5e5d59;
-  --av-text-tertiary: #87867f;
-  --av-border: #c9c7bc;
-  --av-accent: #c96442;
-  --av-accent-soft: rgba(201,100,66,0.12);
-  --av-success: #3B6D11;
-  --av-warning: #854F0B;
-  --av-danger: #A32D2D;
-  --av-chart-1: #c96442;
-  --av-chart-2: #5e5d59;
-  --av-chart-3: #87867f;
-  --av-chart-4: #b0aea5;
-  --av-chart-5: #141413;
-  --av-chart-6: #d6d3d1;
-}
+  /* === Palette: Editorial Parchment === */
+  [data-palette="editorial-parchment"] {
+    --av-surface: #f5f4ed;
+    --av-surface-alt: #e8e6dc;
+    --av-surface-raised: #faf9f5;
+    --av-text-primary: #141413;
+    --av-text-secondary: #5e5d59;
+    --av-text-tertiary: #87867f;
+    --av-border: #c9c7bc;
+    --av-accent: #c96442;
+    --av-accent-soft: rgba(201, 100, 66, 0.12);
+    --av-success: #3b6d11;
+    --av-warning: #854f0b;
+    --av-danger: #a32d2d;
+    --av-chart-1: #c96442;
+    --av-chart-2: #5e5d59;
+    --av-chart-3: #87867f;
+    --av-chart-4: #b0aea5;
+    --av-chart-5: #141413;
+    --av-chart-6: #d6d3d1;
+  }
 
-/* === Palette: Swiss Modernist === */
-[data-palette="swiss-modernist"] {
-  --av-surface: #ffffff;
-  --av-surface-alt: #f0f0f0;
-  --av-surface-raised: #ffffff;
-  --av-text-primary: #111111;
-  --av-text-secondary: #5e5d59;
-  --av-text-tertiary: #87867f;
-  --av-border: #111111;
-  --av-accent: #e4002b;
-  --av-accent-soft: rgba(228,0,43,0.08);
-  --av-success: #3B6D11;
-  --av-warning: #854F0B;
-  --av-danger: #A32D2D;
-  --av-chart-1: #e4002b;
-  --av-chart-2: #111111;
-  --av-chart-3: #5e5d59;
-  --av-chart-4: #87867f;
-  --av-chart-5: #d6d3d1;
-  --av-chart-6: #f5f4ed;
-}
+  /* === Palette: Swiss Modernist === */
+  [data-palette="swiss-modernist"] {
+    --av-surface: #ffffff;
+    --av-surface-alt: #f0f0f0;
+    --av-surface-raised: #ffffff;
+    --av-text-primary: #111111;
+    --av-text-secondary: #5e5d59;
+    --av-text-tertiary: #87867f;
+    --av-border: #111111;
+    --av-accent: #e4002b;
+    --av-accent-soft: rgba(228, 0, 43, 0.08);
+    --av-success: #3b6d11;
+    --av-warning: #854f0b;
+    --av-danger: #a32d2d;
+    --av-chart-1: #e4002b;
+    --av-chart-2: #111111;
+    --av-chart-3: #5e5d59;
+    --av-chart-4: #87867f;
+    --av-chart-5: #d6d3d1;
+    --av-chart-6: #f5f4ed;
+  }
 
-/* === Palette: Vignelli Canon === */
-[data-palette="vignelli-canon"] {
-  --av-surface: #f4f1ea;
-  --av-surface-alt: #eae6db;
-  --av-surface-raised: #ffffff;
-  --av-text-primary: #0a0a0a;
-  --av-text-secondary: #5e5d59;
-  --av-text-tertiary: #87867f;
-  --av-border: #0a0a0a;
-  --av-accent: #f04e23;
-  --av-accent-soft: rgba(240,78,35,0.08);
-  --av-success: #3B6D11;
-  --av-warning: #854F0B;
-  --av-danger: #A32D2D;
-  --av-chart-1: #f04e23;
-  --av-chart-2: #0a0a0a;
-  --av-chart-3: #5e5d59;
-  --av-chart-4: #87867f;
-  --av-chart-5: #d6d3d1;
-  --av-chart-6: #f5f4ed;
-}
+  /* === Palette: Vignelli Canon === */
+  [data-palette="vignelli-canon"] {
+    --av-surface: #f4f1ea;
+    --av-surface-alt: #eae6db;
+    --av-surface-raised: #ffffff;
+    --av-text-primary: #0a0a0a;
+    --av-text-secondary: #5e5d59;
+    --av-text-tertiary: #87867f;
+    --av-border: #0a0a0a;
+    --av-accent: #f04e23;
+    --av-accent-soft: rgba(240, 78, 35, 0.08);
+    --av-success: #3b6d11;
+    --av-warning: #854f0b;
+    --av-danger: #a32d2d;
+    --av-chart-1: #f04e23;
+    --av-chart-2: #0a0a0a;
+    --av-chart-3: #5e5d59;
+    --av-chart-4: #87867f;
+    --av-chart-5: #d6d3d1;
+    --av-chart-6: #f5f4ed;
+  }
 
-/* === Dark: IKB Dark === */
-[data-palette="ikb-dark"], [data-theme="dark"]:not([data-palette]) {
-  --av-surface: #1a1a2e;
-  --av-surface-alt: #252540;
-  --av-surface-raised: #2a2a45;
-  --av-text-primary: #e8e6de;
-  --av-text-secondary: #b4b2a9;
-  --av-text-tertiary: #888780;
-  --av-border: rgba(255,255,255,0.15);
-  --av-accent: #6B8AFF;
-  --av-accent-soft: rgba(107,138,255,0.15);
-  --av-success: #97C459;
-  --av-warning: #EF9F27;
-  --av-danger: #F09595;
-  --av-chart-1: #6B8AFF;
-  --av-chart-2: #5DCAA5;
-  --av-chart-3: #AFA9EC;
-  --av-chart-4: #F0997B;
-  --av-chart-5: #EF9F27;
-  --av-chart-6: #b4b2a9;
-}
+  /* === Palette: Still Paper === */
+  [data-palette="still-paper"] {
+    --av-surface: #f5f4ed;
+    --av-surface-alt: #e8e6dc;
+    --av-surface-raised: #faf9f5;
+    --av-text-primary: #141413;
+    --av-text-secondary: #5e5d59;
+    --av-text-tertiary: #87867f;
+    --av-border: #c9c7bc;
+    --av-accent: #c96442;
+    --av-accent-soft: rgba(201, 100, 66, 0.12);
+    --av-success: #3b6d11;
+    --av-warning: #854f0b;
+    --av-danger: #a32d2d;
+    --av-chart-1: #c96442;
+    --av-chart-2: #5e5d59;
+    --av-chart-3: #87867f;
+    --av-chart-4: #b0aea5;
+    --av-chart-5: #141413;
+    --av-chart-6: #d6d3d1;
+  }
 
-/* === System dark auto-detect (when no data-palette set) === */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-palette]):not([data-theme]) {
+  /* === Palette: Signal Proof === */
+  [data-palette="signal-proof"] {
+    --av-surface: #f5f5f4;
+    --av-surface-alt: #e4e8f0;
+    --av-surface-raised: #ffffff;
+    --av-text-primary: #0a0a0a;
+    --av-text-secondary: #475569;
+    --av-text-tertiary: #64748b;
+    --av-border: #94a3b8;
+    --av-accent: #0039a6;
+    --av-accent-soft: rgba(0, 57, 166, 0.12);
+    --av-success: #1e3a8a;
+    --av-warning: #b45309;
+    --av-danger: #b91c1c;
+    --av-chart-1: #0039a6;
+    --av-chart-2: #475569;
+    --av-chart-3: #64748b;
+    --av-chart-4: #94a3b8;
+    --av-chart-5: #0a0a0a;
+    --av-chart-6: #e2e8f0;
+  }
+
+  /* === Palette: Bridge Canvas === */
+  [data-palette="bridge-canvas"] {
+    --av-surface: #141413;
+    --av-surface-alt: #292524;
+    --av-surface-raised: #1c1917;
+    --av-text-primary: #e8e4e0;
+    --av-text-secondary: #a8a29e;
+    --av-text-tertiary: #78716c;
+    --av-border: #44403c;
+    --av-accent: #ffd500;
+    --av-accent-soft: rgba(255, 213, 0, 0.12);
+    --av-success: #84cc16;
+    --av-warning: #eab308;
+    --av-danger: #ef4444;
+    --av-chart-1: #0d9488;
+    --av-chart-2: #d97706;
+    --av-chart-3: #e8e4e0;
+    --av-chart-4: #78716c;
+    --av-chart-5: #44403c;
+    --av-chart-6: #292524;
+  }
+  /* === Palette: Blueprint === */
+  [data-palette="blueprint"] {
+    --av-surface: #0d1b2a;
+    --av-surface-alt: #14253a;
+    --av-surface-raised: #1a2e44;
+    --av-text-primary: #dbe7f0;
+    --av-text-secondary: #a8c5d6;
+    --av-text-tertiary: #6e93ad;
+    --av-border: #2a4a6b;
+    --av-accent: #5fd0e8;
+    --av-accent-soft: rgba(95, 208, 232, 0.12);
+    --av-success: #6fcf97;
+    --av-warning: #e8c468;
+    --av-danger: #e8836f;
+    --av-chart-1: #5fd0e8;
+    --av-chart-2: #a8c5d6;
+    --av-chart-3: #6e93ad;
+    --av-chart-4: #c7d9e5;
+    --av-chart-5: #3e6a8a;
+    --av-chart-6: #9fb8c9;
+  }
+
+  /* === Dark: IKB Dark === */
+  [data-palette="ikb-dark"],
+  [data-theme="dark"]:not([data-palette]) {
     --av-surface: #1a1a2e;
     --av-surface-alt: #252540;
     --av-surface-raised: #2a2a45;
     --av-text-primary: #e8e6de;
     --av-text-secondary: #b4b2a9;
     --av-text-tertiary: #888780;
-    --av-border: rgba(255,255,255,0.15);
-    --av-accent: #6B8AFF;
-    --av-accent-soft: rgba(107,138,255,0.15);
-    --av-success: #97C459;
-    --av-warning: #EF9F27;
-    --av-danger: #F09595;
-    --av-chart-1: #6B8AFF;
-    --av-chart-2: #5DCAA5;
-    --av-chart-3: #AFA9EC;
-    --av-chart-4: #F0997B;
-    --av-chart-5: #EF9F27;
+    --av-border: rgba(255, 255, 255, 0.15);
+    --av-accent: #6b8aff;
+    --av-accent-soft: rgba(107, 138, 255, 0.15);
+    --av-success: #97c459;
+    --av-warning: #ef9f27;
+    --av-danger: #f09595;
+    --av-chart-1: #6b8aff;
+    --av-chart-2: #5dcaa5;
+    --av-chart-3: #afa9ec;
+    --av-chart-4: #f0997b;
+    --av-chart-5: #ef9f27;
     --av-chart-6: #b4b2a9;
   }
-}
 
-/* === Toggle button === */
-#archviz-theme-toggle {
-  position: fixed;
-  top: 12px;
-  right: 12px;
-  z-index: 9999;
-  background: var(--av-surface-raised, #faf9f5);
-  border: 1px solid var(--av-border, #d6d3d1);
-  border-radius: 8px;
-  padding: 6px 12px;
-  font: 12px/1 system-ui, -apple-system, sans-serif;
-  color: var(--av-text-secondary, #5e5d59);
-  cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
-  user-select: none;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-#archviz-theme-toggle:hover {
-  background: var(--av-surface-alt, #e8e4e0);
-  border-color: var(--av-text-tertiary, #87867f);
-}
+  /* === System dark auto-detect (when no data-palette set) === */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-palette]):not([data-theme]) {
+      --av-surface: #1a1a2e;
+      --av-surface-alt: #252540;
+      --av-surface-raised: #2a2a45;
+      --av-text-primary: #e8e6de;
+      --av-text-secondary: #b4b2a9;
+      --av-text-tertiary: #888780;
+      --av-border: rgba(255, 255, 255, 0.15);
+      --av-accent: #6b8aff;
+      --av-accent-soft: rgba(107, 138, 255, 0.15);
+      --av-success: #97c459;
+      --av-warning: #ef9f27;
+      --av-danger: #f09595;
+      --av-chart-1: #6b8aff;
+      --av-chart-2: #5dcaa5;
+      --av-chart-3: #afa9ec;
+      --av-chart-4: #f0997b;
+      --av-chart-5: #ef9f27;
+      --av-chart-6: #b4b2a9;
+    }
+  }
+
+  /* Transition theme changes smoothly */
+  body,
+  .root {
+    transition:
+      background-color 150ms ease-out,
+      color 150ms ease-out,
+      border-color 150ms ease-out;
+  }
+
+  /* === Toggle button === */
+  #archviz-theme-toggle {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 9999;
+    background: var(--av-surface-raised, #faf9f5);
+    border: 1px solid var(--av-border, #d6d3d1);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font:
+      12px/1 system-ui,
+      -apple-system,
+      sans-serif;
+    color: var(--av-text-secondary, #5e5d59);
+    cursor: pointer;
+    transition:
+      background 150ms ease-out,
+      border-color 150ms ease-out,
+      transform 100ms ease-out;
+    user-select: none;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  #archviz-theme-toggle:active {
+    transform: scale(0.97);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    #archviz-theme-toggle:hover {
+      background: var(--av-surface-alt, #e8e4e0);
+      border-color: var(--av-text-tertiary, #87867f);
+    }
+  }
 </style>
 
 <script>
-/* archviz-skills Theme System
- * API:
- *   applyPalette(name)  — set palette by name
- *   toggleTheme()        — toggle light↔dark
- *   getCurrentPalette()  — return current palette name
- *   isDark()             — boolean
- *   ARCHVIZ_PALETTES     — palette registry
- */
-(function() {
-  'use strict';
+  /* archviz-skills Theme System
+   * API:
+   *   applyPalette(name)  — set palette by name
+   *   toggleTheme()        — toggle light↔dark
+   *   getCurrentPalette()  — return current palette name
+   *   isDark()             — boolean
+   *   ARCHVIZ_PALETTES     — palette registry
+   */
+  (function () {
+    "use strict";
 
-  const PALETTES = {
-    'warm-paper':          { label: 'Warm Paper',    mode: 'light' },
-    'swiss-neutral':       { label: 'Swiss Neutral',  mode: 'light' },
-    'editorial-parchment': { label: 'Editorial',      mode: 'light' },
-    'swiss-modernist':     { label: 'Swiss Modernist',mode: 'light' },
-    'vignelli-canon':      { label: 'Vignelli Canon', mode: 'light' },
-    'ikb-dark':            { label: 'IKB Dark',       mode: 'dark'  },
-    'auto-time':           { label: 'Auto (Time)',    mode: 'auto'  }
-  };
+    const PALETTES = {
+      "warm-paper": { label: "Warm Paper", mode: "light" },
+      "swiss-neutral": { label: "Swiss Neutral", mode: "light" },
+      "editorial-parchment": { label: "Editorial", mode: "light" },
+      "swiss-modernist": { label: "Swiss Modernist", mode: "light" },
+      "vignelli-canon": { label: "Vignelli Canon", mode: "light" },
+      "still-paper": { label: "Still Paper", mode: "light" },
+      "signal-proof": { label: "Signal Proof", mode: "light" },
+      "bridge-canvas": { label: "Bridge Canvas", mode: "dark" },
+      blueprint: { label: "Blueprint", mode: "dark" },
+      "ikb-dark": { label: "IKB Dark", mode: "dark" },
+      "auto-time": { label: "Auto (Time)", mode: "auto" },
+    };
 
-  // Expose globally for export module
-  window.ARCHVIZ_PALETTES = PALETTES;
+    // Expose globally for export module
+    window.ARCHVIZ_PALETTES = PALETTES;
 
-  let currentPalette = 'warm-paper';
+    let currentPalette = "warm-paper";
 
-  function applyPalette(name) {
-    if (!PALETTES[name]) return;
-    currentPalette = name;
-    const root = document.documentElement;
-    let resolvedPalette = name;
-    let activeMode = PALETTES[name].mode;
+    function applyPalette(name) {
+      if (!PALETTES[name]) return;
+      currentPalette = name;
+      const root = document.documentElement;
+      let resolvedPalette = name;
+      let activeMode = PALETTES[name].mode;
 
-    if (name === 'auto-time') {
-      const hours = new Date().getHours();
-      const isDaytime = hours >= 6 && hours < 18;
-      resolvedPalette = isDaytime ? 'editorial-parchment' : 'ikb-dark';
-      activeMode = isDaytime ? 'light' : 'dark';
-      root.setAttribute('data-palette-selection', 'auto-time');
-    } else {
-      root.removeAttribute('data-palette-selection');
-    }
-
-    root.setAttribute('data-palette', resolvedPalette);
-    root.setAttribute('data-theme', activeMode);
-    localStorage.setItem('archviz-palette', name);
-    updateToggleLabel();
-    window.dispatchEvent(new Event('archviz-theme-changed'));
-  }
-
-  function toggleTheme() {
-    const order = ['warm-paper', 'swiss-neutral', 'editorial-parchment', 'swiss-modernist', 'vignelli-canon', 'ikb-dark', 'auto-time'];
-    const idx = order.indexOf(currentPalette);
-    applyPalette(order[(idx + 1) % order.length]);
-  }
-
-  function getCurrentPalette() { return currentPalette; }
-  function isDark() {
-    if (currentPalette === 'auto-time') {
-      const hours = new Date().getHours();
-      return !(hours >= 6 && hours < 18);
-    }
-    return PALETTES[currentPalette]?.mode === 'dark';
-  }
-
-  function updateToggleLabel() {
-    const btn = document.getElementById('archviz-theme-toggle');
-    if (btn) btn.textContent = PALETTES[currentPalette]?.label || currentPalette;
-  }
-
-  // Auto-init on DOMContentLoaded
-  function init() {
-    // Restore saved palette
-    const saved = localStorage.getItem('archviz-palette');
-    if (saved && PALETTES[saved]) {
-      applyPalette(saved);
-    } else {
-      applyPalette('auto-time');
-    }
-
-    // Create toggle button
-    const btn = document.createElement('button');
-    btn.id = 'archviz-theme-toggle';
-    btn.textContent = PALETTES[currentPalette]?.label || 'Theme';
-    btn.addEventListener('click', toggleTheme);
-    document.body.appendChild(btn);
-
-    // Periodically update theme if auto-time
-    setInterval(function() {
-      if (currentPalette === 'auto-time') {
+      if (name === "auto-time") {
         const hours = new Date().getHours();
         const isDaytime = hours >= 6 && hours < 18;
-        const resolvedPalette = isDaytime ? 'editorial-parchment' : 'ikb-dark';
-        const root = document.documentElement;
-        if (root.getAttribute('data-palette') !== resolvedPalette) {
-          applyPalette('auto-time');
-        }
+        resolvedPalette = isDaytime ? "still-paper" : "ikb-dark";
+        activeMode = isDaytime ? "light" : "dark";
+        root.setAttribute("data-palette-selection", "auto-time");
+      } else {
+        root.removeAttribute("data-palette-selection");
       }
-    }, 60000);
-  }
 
-  // Expose API
-  window.archvizTheme = { applyPalette, toggleTheme, getCurrentPalette, isDark, init };
+      root.setAttribute("data-palette", resolvedPalette);
+      root.setAttribute("data-theme", activeMode);
+      localStorage.setItem("archviz-palette", name);
+      updateToggleLabel();
+      window.dispatchEvent(new Event("archviz-theme-changed"));
+    }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-})();
+    function toggleTheme() {
+      const order = [
+        "warm-paper",
+        "swiss-neutral",
+        "editorial-parchment",
+        "swiss-modernist",
+        "vignelli-canon",
+        "still-paper",
+        "signal-proof",
+        "bridge-canvas",
+        "blueprint",
+        "ikb-dark",
+        "auto-time",
+      ];
+      const idx = order.indexOf(currentPalette);
+      applyPalette(order[(idx + 1) % order.length]);
+    }
+
+    function getCurrentPalette() {
+      return currentPalette;
+    }
+    function isDark() {
+      if (currentPalette === "auto-time") {
+        const hours = new Date().getHours();
+        return !(hours >= 6 && hours < 18);
+      }
+      return PALETTES[currentPalette]?.mode === "dark";
+    }
+
+    function updateToggleLabel() {
+      const btn = document.getElementById("archviz-theme-toggle");
+      if (btn)
+        btn.textContent = PALETTES[currentPalette]?.label || currentPalette;
+    }
+
+    // Auto-init on DOMContentLoaded
+    function init() {
+      // Restore saved palette
+      const saved = localStorage.getItem("archviz-palette");
+      if (saved && PALETTES[saved]) {
+        applyPalette(saved);
+      } else {
+        applyPalette("auto-time");
+      }
+
+      // Create toggle button
+      const btn = document.createElement("button");
+      btn.id = "archviz-theme-toggle";
+      btn.textContent = PALETTES[currentPalette]?.label || "Theme";
+      btn.addEventListener("click", toggleTheme);
+      document.body.appendChild(btn);
+
+      // Periodically update theme if auto-time
+      setInterval(function () {
+        if (currentPalette === "auto-time") {
+          const hours = new Date().getHours();
+          const isDaytime = hours >= 6 && hours < 18;
+          const resolvedPalette = isDaytime ? "still-paper" : "ikb-dark";
+          const root = document.documentElement;
+          if (root.getAttribute("data-palette") !== resolvedPalette) {
+            applyPalette("auto-time");
+          }
+        }
+      }, 60000);
+    }
+
+    // Expose API
+    window.archvizTheme = {
+      applyPalette,
+      toggleTheme,
+      getCurrentPalette,
+      isDark,
+      init,
+    };
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", init);
+    } else {
+      init();
+    }
+  })();
 </script>

@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.6.2 (2026-09-30)
+
+Re-synced the shared partials to archviz-diagram and gave this repo the same
+maintenance scripts, so the inline copies stop being hand-maintained.
+
+### Changed
+- **`_archviz-theme.html` and `_archviz-export.html` re-synced** to
+  archviz-diagram's modules. They had been stale forks since 2026-06-13. The
+  theme registry goes **7 → 11** palettes (`still-paper`, `signal-proof`,
+  `bridge-canvas`, `blueprint`); the export module picks up the `tagName`
+  case fix and the 10 s `svgToBlob` guard diagram received.
+- **This repo now carries `scripts/sync_theme.py` + `scripts/sync_export.py`**
+  (copied from archviz-diagram; this repo's three extra paste-in partials —
+  `_archviz-3d-contract.html`, `_archviz-deps.html`, `_archviz-svg-overlay.html`
+  — added to `EXCLUDED` with a reason). The templates' inline copies are now
+  generated, not hand-written. That removes the failure mode behind v0.6.1's
+  P0: a hand-minified copy that lost a `}`.
+- **The theme block was relocated in both templates.** It used to be split —
+  palette CSS inside the head's shared `<style>`, theme JS in a separate
+  `<script>` near the end. `sync_theme.py` requires the block to be contiguous
+  between `<style id="archviz-theme-vars">` and the first `</script>`, so the
+  whole block (CSS + JS) now sits as one unit in `<head>`.
+
+### Docs
+- `README.md` / `SKILL.md` no longer advertise a palette count (both said "4",
+  and had been wrong since long before). They point at `ARCHVIZ_PALETTES`.
+
+### Verified
+- `node --check` on every inline `<script>` (classic and module), both templates.
+- Headless Chromium: no `pageerror`; `ARCHVIZ_PALETTES` = **11** keys and
+  cycles; PNG / WebP export at 5760×3600, **100 % opaque** — 1407 and 9920
+  distinct colours respectively, i.e. the same numbers as before the splice, so
+  the export path was not disturbed.
+- Both sync scripts are idempotent: a second run leaves `git diff --stat`
+  unchanged.
+
+### Known, not fixed here
+- **Still no CI.** Nothing enforces the sync; run both scripts before committing.
+
 ## v0.6.1 (2026-09-30)
 
 Export chain was non-functional in both templates. Reproduced in headless

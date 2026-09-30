@@ -5,7 +5,9 @@
 ## Features
 
 - **Self-contained**: zero build step, CDN importmap, single HTML file
-- **Theme system**: 4 palettes (Warm Paper, Swiss Neutral, Editorial, IKB Dark), runtime toggle
+- **Theme system**: runtime palette toggle — registry is `ARCHVIZ_PALETTES` in
+  `templates/html/_archviz-theme.html`. **Don't hardcode the count here**; this
+  line advertised "4" for months while the registry held 7, then 11.
 - **Export**: 4× PNG, SVG, WebP, clipboard — keyboard shortcuts T/E
 - **3D templates**: building structure, floor plan navigation
 - **Examples**: teaching building, product exploded view

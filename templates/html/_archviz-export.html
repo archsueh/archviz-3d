@@ -3,415 +3,572 @@
 <!-- Provides: 4× PNG/SVG/WebP export, clipboard, keyboard T/E, export menu -->
 <!-- Requires: _archviz-theme.html loaded in <head> -->
 <style id="archviz-export-styles">
-#archviz-export-btn {
-  position: fixed;
-  top: 12px;
-  right: 140px;
-  z-index: 9999;
-  background: var(--av-surface-raised, #faf9f5);
-  border: 1px solid var(--av-border, #d6d3d1);
-  border-radius: 8px;
-  padding: 6px 12px;
-  font: 12px/1 system-ui, -apple-system, sans-serif;
-  color: var(--av-text-secondary, #5e5d59);
-  cursor: pointer;
-  transition: background 0.2s;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-#archviz-export-btn:hover {
-  background: var(--av-surface-alt, #e8e4e0);
-}
-#archviz-export-menu {
-  display: none;
-  position: fixed;
-  top: 44px;
-  right: 140px;
-  z-index: 10000;
-  background: var(--av-surface-raised, #faf9f5);
-  border: 1px solid var(--av-border, #d6d3d1);
-  border-radius: 10px;
-  padding: 6px 0;
-  min-width: 180px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-#archviz-export-menu.open { display: block; }
-#archviz-export-menu button {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 8px 16px;
-  border: none;
-  background: none;
-  font: 13px/1.4 system-ui, -apple-system, sans-serif;
-  color: var(--av-text-primary, #1B365D);
-  cursor: pointer;
-}
-#archviz-export-menu button:hover {
-  background: var(--av-accent-soft, rgba(0,47,167,0.08));
-}
-#archviz-export-menu .sep {
-  height: 1px;
-  background: var(--av-border, #d6d3d1);
-  margin: 4px 0;
-}
-#archviz-export-menu .shortcut {
-  float: right;
-  color: var(--av-text-tertiary, #87867f);
-  font-size: 11px;
-}
-#archviz-export-toast {
-  display: none;
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10001;
-  background: var(--av-surface-raised, #faf9f5);
-  border: 1px solid var(--av-border, #d6d3d1);
-  border-radius: 8px;
-  padding: 10px 20px;
-  font: 13px/1 system-ui, -apple-system, sans-serif;
-  color: var(--av-text-primary, #1B365D);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-  animation: archviz-toast-in 0.3s ease;
-}
-@keyframes archviz-toast-in {
-  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
-}
+  #archviz-export-btn {
+    position: fixed;
+    top: 12px;
+    right: 140px;
+    z-index: 9999;
+    background: var(--av-surface-raised, #faf9f5);
+    border: 1px solid var(--av-border, #d6d3d1);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font:
+      12px/1 system-ui,
+      -apple-system,
+      sans-serif;
+    color: var(--av-text-secondary, #5e5d59);
+    cursor: pointer;
+    transition:
+      background 150ms ease-out,
+      border-color 150ms ease-out,
+      transform 100ms ease-out;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  #archviz-export-btn:active {
+    transform: scale(0.97);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    #archviz-export-btn:hover {
+      background: var(--av-surface-alt, #e8e4e0);
+      border-color: var(--av-text-tertiary, #87867f);
+    }
+  }
+  #archviz-export-menu {
+    position: fixed;
+    top: 44px;
+    right: 140px;
+    z-index: 10000;
+    background: var(--av-surface-raised, #faf9f5);
+    border: 1px solid var(--av-border, #d6d3d1);
+    border-radius: 10px;
+    padding: 6px 0;
+    min-width: 180px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+
+    /* Motion parameters: start closed and scale from trigger button */
+    opacity: 0;
+    transform: scale(0.95);
+    transform-origin: top right;
+    transition:
+      opacity 150ms cubic-bezier(0.16, 1, 0.3, 1),
+      transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: none;
+  }
+  #archviz-export-menu.open {
+    opacity: 1;
+    transform: scale(1);
+    pointer-events: auto;
+  }
+  #archviz-export-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 8px 16px;
+    border: none;
+    background: none;
+    font:
+      13px/1.4 system-ui,
+      -apple-system,
+      sans-serif;
+    color: var(--av-text-primary, #1b365d);
+    cursor: pointer;
+    transition:
+      background 150ms ease-out,
+      transform 100ms ease-out;
+  }
+  #archviz-export-menu button:active {
+    transform: scale(0.98);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    #archviz-export-menu button:hover {
+      background: var(--av-accent-soft, rgba(0, 47, 167, 0.08));
+    }
+  }
+  #archviz-export-menu .sep {
+    height: 1px;
+    background: var(--av-border, #d6d3d1);
+    margin: 4px 0;
+  }
+  #archviz-export-menu .shortcut {
+    float: right;
+    color: var(--av-text-tertiary, #87867f);
+    font-size: 11px;
+  }
+  #archviz-export-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(8px);
+    z-index: 10001;
+    background: var(--av-surface-raised, #faf9f5);
+    border: 1px solid var(--av-border, #d6d3d1);
+    border-radius: 8px;
+    padding: 10px 20px;
+    font:
+      13px/1 system-ui,
+      -apple-system,
+      sans-serif;
+    color: var(--av-text-primary, #1b365d);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+
+    opacity: 0;
+    transition:
+      opacity 200ms cubic-bezier(0.16, 1, 0.3, 1),
+      transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: none;
+  }
+  #archviz-export-toast.visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+    pointer-events: auto;
+  }
 </style>
 
 <script>
-/* archviz-skills Export System
- * Keyboard: T = cycle theme, E = toggle export menu
- * API:
- *   exportPNG(selector, scale)   — 4× raster PNG download
- *   exportSVG(selector)          — dual-theme SVG download
- *   exportWebP(selector, scale)  — 4× WebP download
- *   copyToClipboard(selector)    — clipboard PNG
- */
-(function() {
-  'use strict';
+  /* archviz-skills Export System
+   * Keyboard: T = cycle theme, E = toggle export menu
+   * API:
+   *   exportPNG(selector, scale)   — 4× raster PNG download
+   *   exportSVG(selector)          — dual-theme SVG download
+   *   exportWebP(selector, scale)  — 4× WebP download
+   *   copyToClipboard(selector)    — clipboard PNG
+   */
+  (function () {
+    "use strict";
 
-  const SCALE_DEFAULT = 4;
+    const SCALE_DEFAULT = 4;
 
-  // --- Toast ---
-  function toast(msg) {
-    let el = document.getElementById('archviz-export-toast');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'archviz-export-toast';
-      document.body.appendChild(el);
+    // --- Toast ---
+    function toast(msg) {
+      let el = document.getElementById("archviz-export-toast");
+      if (!el) {
+        el = document.createElement("div");
+        el.id = "archviz-export-toast";
+        document.body.appendChild(el);
+      }
+      el.textContent = msg;
+      // Force a layout reflow to ensure the transition triggers
+      el.getBoundingClientRect();
+      el.classList.add("visible");
+      clearTimeout(el._t);
+      el._t = setTimeout(() => el.classList.remove("visible"), 2200);
     }
-    el.textContent = msg;
-    el.style.display = 'block';
-    clearTimeout(el._t);
-    el._t = setTimeout(() => el.style.display = 'none', 2200);
-  }
 
-  // --- Find export target (first SVG, or first canvas, or .archviz-export-target) ---
-  function findTarget(selector) {
-    if (selector) return document.querySelector(selector);
-    return document.querySelector('.archviz-export-target')
-      || document.querySelector('svg')
-      || document.querySelector('canvas')
-      || document.querySelector('article, .card, .canvas');
-  }
-
-  // --- SVG → PNG at N× via native rasterization ---
-  function svgToBlob(svgEl, scale, format) {
-    return new Promise((resolve, reject) => {
-      const vb = svgEl.viewBox?.baseVal;
-      const w = vb?.width || svgEl.clientWidth || 800;
-      const h = vb?.height || svgEl.clientHeight || 600;
-      const clone = svgEl.cloneNode(true);
-
-      // Inject current CSS vars into clone
-      const computed = getComputedStyle(document.documentElement);
-      const vars = ['--av-surface','--av-surface-alt','--av-text-primary',
-                    '--av-text-secondary','--av-text-tertiary','--av-border',
-                    '--av-accent','--av-chart-1','--av-chart-2','--av-chart-3',
-                    '--av-chart-4','--av-chart-5','--av-chart-6'];
-      let varCSS = ':root{';
-      vars.forEach(v => { varCSS += v + ':' + computed.getPropertyValue(v).trim() + ';'; });
-      varCSS += '}';
-
-      // Insert var overrides
-      let styleEl = clone.querySelector('style');
-      if (!styleEl) {
-        styleEl = document.createElementNS('http://www.w3.org/2000/svg','style');
-        clone.insertBefore(styleEl, clone.firstChild);
-      }
-      styleEl.textContent = varCSS + styleEl.textContent;
-
-      clone.setAttribute('width', w * scale);
-      clone.setAttribute('height', h * scale);
-      if (!clone.getAttribute('viewBox')) {
-        clone.setAttribute('viewBox', `0 0 ${w} ${h}`);
-      }
-
-      const svgStr = new XMLSerializer().serializeToString(clone);
-      const svgBlob = new Blob([svgStr], {type: 'image/svg+xml;charset=utf-8'});
-      const url = URL.createObjectURL(svgBlob);
-      const img = new Image();
-      const timer = setTimeout(() => {
-        URL.revokeObjectURL(url);
-        reject(new Error('SVG rasterization timed out'));
-      }, 10000);
-      img.onload = () => {
-        clearTimeout(timer);
-        const canvas = document.createElement('canvas');
-        canvas.width = w * scale;
-        canvas.height = h * scale;
-        const ctx = canvas.getContext('2d');
-        // Fill background
-        ctx.fillStyle = computed.getPropertyValue('--av-surface').trim() || '#f5f0eb';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0);
-        URL.revokeObjectURL(url);
-        canvas.toBlob(blob => {
-          if (blob) resolve(blob);
-          else reject(new Error('toBlob failed'));
-        }, format || 'image/png');
-      };
-      img.onerror = () => { clearTimeout(timer); URL.revokeObjectURL(url); reject(new Error('SVG load failed')); };
-      img.src = url;
-    });
-  }
-
-  // --- Canvas → Blob at N× via re-render hook ---
-  function canvasToBlob(canvasEl, scale, format) {
-    return new Promise((resolve, reject) => {
-      // Check for exposed renderAtScale
-      if (canvasEl.renderAtScale) {
-        const tmpCanvas = document.createElement('canvas');
-        tmpCanvas.width = canvasEl.width * scale;
-        tmpCanvas.height = canvasEl.height * scale;
-        const ctx = tmpCanvas.getContext('2d');
-        ctx.scale(scale, scale);
-        canvasEl.renderAtScale(ctx, scale);
-        tmpCanvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('toBlob failed')), format || 'image/png');
-      } else {
-        // Fallback: upscale existing canvas
-        const tmpCanvas = document.createElement('canvas');
-        tmpCanvas.width = canvasEl.width * scale;
-        tmpCanvas.height = canvasEl.height * scale;
-        const ctx = tmpCanvas.getContext('2d');
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(canvasEl, 0, 0, tmpCanvas.width, tmpCanvas.height);
-        tmpCanvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('toBlob failed')), format || 'image/png');
-      }
-    });
-  }
-
-  // --- Generic export: auto-detect SVG vs Canvas vs HTML ---
-  async function exportBlob(target, scale, format) {
-    scale = scale || SCALE_DEFAULT;
-    // Elements in the SVG namespace report tagName in lowercase ('svg'),
-    // while HTML elements report uppercase ('CANVAS'). Comparing against 'SVG'
-    // never matched, so every SVG target fell through to the HTML branch
-    // below, which hung the image decoder with no way to recover.
-    const tag = (target.tagName || '').toLowerCase();
-    if (tag === 'svg') {
-      return svgToBlob(target, scale, format);
-    } else if (tag === 'canvas') {
-      return canvasToBlob(target, scale, format);
-    } else {
-      // HTML targets are deliberately not rasterized: wrapping outerHTML in a
-      // <foreignObject> and loading it as an <img> blocks the main thread on
-      // any non-trivial subtree, so not even a timeout guard can fire.
-      throw new Error(
-        "this template's export target is HTML - give it an <svg> or <canvas> element to rasterize"
+    // --- Find export target (first SVG, or first canvas, or .archviz-export-target) ---
+    function findTarget(selector) {
+      if (selector) return document.querySelector(selector);
+      return (
+        document.querySelector(".archviz-export-target") ||
+        document.querySelector("svg") ||
+        document.querySelector("canvas") ||
+        document.querySelector("article, .card, .canvas")
       );
     }
-  }
 
-  // --- Download helper ---
-  function download(blob, filename) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
+    // --- SVG → PNG at N× via native rasterization ---
+    function svgToBlob(svgEl, scale, format) {
+      return new Promise((resolve, reject) => {
+        const vb = svgEl.viewBox?.baseVal;
+        const w = vb?.width || svgEl.clientWidth || 800;
+        const h = vb?.height || svgEl.clientHeight || 600;
+        const clone = svgEl.cloneNode(true);
 
-  // --- Public API ---
-  async function exportPNG(selector, scale) {
-    const target = findTarget(selector);
-    if (!target) { toast('No export target found'); return; }
-    try {
-      const blob = await exportBlob(target, scale || SCALE_DEFAULT, 'image/png');
-      download(blob, 'archviz-' + Date.now() + '.png');
-      toast('PNG exported (4× raster)');
-    } catch(e) { toast('Export failed: ' + e.message); console.error(e); }
-  }
+        // Inject current CSS vars into clone
+        const computed = getComputedStyle(document.documentElement);
+        const vars = [
+          "--av-surface",
+          "--av-surface-alt",
+          "--av-text-primary",
+          "--av-text-secondary",
+          "--av-text-tertiary",
+          "--av-border",
+          "--av-accent",
+          "--av-chart-1",
+          "--av-chart-2",
+          "--av-chart-3",
+          "--av-chart-4",
+          "--av-chart-5",
+          "--av-chart-6",
+        ];
+        let varCSS = ":root{";
+        vars.forEach((v) => {
+          varCSS += v + ":" + computed.getPropertyValue(v).trim() + ";";
+        });
+        varCSS += "}";
 
-  async function exportWebP(selector, scale) {
-    const target = findTarget(selector);
-    if (!target) { toast('No export target found'); return; }
-    try {
-      const blob = await exportBlob(target, scale || SCALE_DEFAULT, 'image/webp');
-      download(blob, 'archviz-' + Date.now() + '.webp');
-      toast('WebP exported (4× raster)');
-    } catch(e) { toast('Export failed: ' + e.message); console.error(e); }
-  }
+        // Insert var overrides
+        let styleEl = clone.querySelector("style");
+        if (!styleEl) {
+          styleEl = document.createElementNS(
+            "http://www.w3.org/2000/svg",
+            "style",
+          );
+          clone.insertBefore(styleEl, clone.firstChild);
+        }
+        styleEl.textContent = varCSS + styleEl.textContent;
 
-  async function exportSVG(selector) {
-    const target = findTarget(selector);
-    if (!target || (target.tagName || '').toLowerCase() !== 'svg') { toast('SVG export requires an SVG target'); return; }
-    try {
-      const clone = target.cloneNode(true);
-      const computed = getComputedStyle(document.documentElement);
-      const vars = ['--av-surface','--av-surface-alt','--av-text-primary',
-                    '--av-text-secondary','--av-text-tertiary','--av-border',
-                    '--av-accent','--av-chart-1','--av-chart-2','--av-chart-3',
-                    '--av-chart-4','--av-chart-5','--av-chart-6'];
-      let varCSS = ':root{';
-      vars.forEach(v => { varCSS += v + ':' + computed.getPropertyValue(v).trim() + ';'; });
-      varCSS += '}';
-      let styleEl = clone.querySelector('style');
-      if (!styleEl) {
-        styleEl = document.createElementNS('http://www.w3.org/2000/svg','style');
-        clone.insertBefore(styleEl, clone.firstChild);
-      }
-      styleEl.textContent = varCSS + styleEl.textContent;
-      const svgStr = new XMLSerializer().serializeToString(clone);
-      const blob = new Blob([svgStr], {type: 'image/svg+xml;charset=utf-8'});
-      download(blob, 'archviz-' + Date.now() + '.svg');
-      toast('SVG exported (with theme vars)');
-    } catch(e) { toast('SVG export failed: ' + e.message); console.error(e); }
-  }
+        clone.setAttribute("width", w * scale);
+        clone.setAttribute("height", h * scale);
+        if (!clone.getAttribute("viewBox")) {
+          clone.setAttribute("viewBox", `0 0 ${w} ${h}`);
+        }
 
-  async function copyToClipboard(selector) {
-    const target = findTarget(selector);
-    if (!target) { toast('No export target found'); return; }
-    try {
-      const blob = await exportBlob(target, SCALE_DEFAULT, 'image/png');
-      if (navigator.clipboard && window.ClipboardItem) {
-        await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
-        toast('Copied to clipboard (4× PNG)');
+        const svgStr = new XMLSerializer().serializeToString(clone);
+        const svgBlob = new Blob([svgStr], {
+          type: "image/svg+xml;charset=utf-8",
+        });
+        const url = URL.createObjectURL(svgBlob);
+        const img = new Image();
+        const timer = setTimeout(() => {
+          URL.revokeObjectURL(url);
+          reject(new Error("SVG rasterization timed out"));
+        }, 10000);
+        img.onload = () => {
+          clearTimeout(timer);
+          const canvas = document.createElement("canvas");
+          canvas.width = w * scale;
+          canvas.height = h * scale;
+          const ctx = canvas.getContext("2d");
+          // Fill background
+          ctx.fillStyle =
+            computed.getPropertyValue("--av-surface").trim() || "#f5f0eb";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0);
+          URL.revokeObjectURL(url);
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("toBlob failed"));
+          }, format || "image/png");
+        };
+        img.onerror = () => {
+          clearTimeout(timer);
+          URL.revokeObjectURL(url);
+          reject(new Error("SVG load failed"));
+        };
+        img.src = url;
+      });
+    }
+
+    // --- Canvas → Blob at N× via re-render hook ---
+    function canvasToBlob(canvasEl, scale, format) {
+      return new Promise((resolve, reject) => {
+        // Check for exposed renderAtScale
+        if (canvasEl.renderAtScale) {
+          const tmpCanvas = document.createElement("canvas");
+          tmpCanvas.width = canvasEl.width * scale;
+          tmpCanvas.height = canvasEl.height * scale;
+          const ctx = tmpCanvas.getContext("2d");
+          ctx.scale(scale, scale);
+          canvasEl.renderAtScale(ctx, scale);
+          tmpCanvas.toBlob(
+            (blob) =>
+              blob ? resolve(blob) : reject(new Error("toBlob failed")),
+            format || "image/png",
+          );
+        } else {
+          // Fallback: upscale existing canvas
+          const tmpCanvas = document.createElement("canvas");
+          tmpCanvas.width = canvasEl.width * scale;
+          tmpCanvas.height = canvasEl.height * scale;
+          const ctx = tmpCanvas.getContext("2d");
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
+          ctx.drawImage(canvasEl, 0, 0, tmpCanvas.width, tmpCanvas.height);
+          tmpCanvas.toBlob(
+            (blob) =>
+              blob ? resolve(blob) : reject(new Error("toBlob failed")),
+            format || "image/png",
+          );
+        }
+      });
+    }
+
+    // --- Generic export: auto-detect SVG vs Canvas vs HTML ---
+    async function exportBlob(target, scale, format) {
+      scale = scale || SCALE_DEFAULT;
+      // Elements in the SVG namespace report tagName in lowercase ("svg"),
+      // while HTML elements report uppercase ("CANVAS"). Comparing against
+      // "SVG" never matched, so every SVG target fell through to the HTML
+      // fallback below and hung there forever without ever firing a toast.
+      const tag = (target.tagName || "").toLowerCase();
+      if (tag === "svg") {
+        return svgToBlob(target, scale, format);
+      } else if (tag === "canvas") {
+        return canvasToBlob(target, scale, format);
       } else {
-        // Fallback: data URL to console
-        const reader = new FileReader();
-        reader.onload = () => { console.log('Clipboard fallback — data URL:', reader.result); };
-        reader.readAsDataURL(blob);
-        toast('Clipboard unavailable — data URL logged to console');
+        // HTML targets are deliberately not rasterized.
+        //
+        // The previous implementation wrapped `target.outerHTML` in a
+        // <foreignObject> and loaded it as an <img>. On any non-trivial
+        // subtree that hangs Chromium's image decoder hard enough to block the
+        // main thread — so the promise never settled, no toast appeared, and
+        // even the timeout guard below could not fire. It also would have
+        // produced an unstyled image, since external CSS is not inlined.
+        //
+        // Fail fast instead, and say what to do.
+        throw new Error(
+          "this template's export target is HTML — give it an <svg> or <canvas> element to rasterize",
+        );
       }
-    } catch(e) { toast('Clipboard failed: ' + e.message); console.error(e); }
-  }
+    }
 
-  // --- Menu UI ---
-  function createMenu() {
-    const btn = document.createElement('button');
-    btn.id = 'archviz-export-btn';
-    btn.textContent = 'Export';
-    btn.addEventListener('click', toggleMenu);
+    // --- Download helper ---
+    function download(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
 
-    const menu = document.createElement('div');
-    menu.id = 'archviz-export-menu';
-    menu.innerHTML = `
+    // --- Public API ---
+    async function exportPNG(selector, scale) {
+      const target = findTarget(selector);
+      if (!target) {
+        toast("No export target found");
+        return;
+      }
+      try {
+        const blob = await exportBlob(
+          target,
+          scale || SCALE_DEFAULT,
+          "image/png",
+        );
+        download(blob, "archviz-" + Date.now() + ".png");
+        toast("PNG exported (4× raster)");
+      } catch (e) {
+        toast("Export failed: " + e.message);
+        console.error(e);
+      }
+    }
+
+    async function exportWebP(selector, scale) {
+      const target = findTarget(selector);
+      if (!target) {
+        toast("No export target found");
+        return;
+      }
+      try {
+        const blob = await exportBlob(
+          target,
+          scale || SCALE_DEFAULT,
+          "image/webp",
+        );
+        download(blob, "archviz-" + Date.now() + ".webp");
+        toast("WebP exported (4× raster)");
+      } catch (e) {
+        toast("Export failed: " + e.message);
+        console.error(e);
+      }
+    }
+
+    async function exportSVG(selector) {
+      const target = findTarget(selector);
+      // lowercase: SVG-namespace elements report tagName as "svg", not "SVG"
+      if (!target || (target.tagName || "").toLowerCase() !== "svg") {
+        toast("SVG export requires an SVG target");
+        return;
+      }
+      try {
+        const clone = target.cloneNode(true);
+        const computed = getComputedStyle(document.documentElement);
+        const vars = [
+          "--av-surface",
+          "--av-surface-alt",
+          "--av-text-primary",
+          "--av-text-secondary",
+          "--av-text-tertiary",
+          "--av-border",
+          "--av-accent",
+          "--av-chart-1",
+          "--av-chart-2",
+          "--av-chart-3",
+          "--av-chart-4",
+          "--av-chart-5",
+          "--av-chart-6",
+        ];
+        let varCSS = ":root{";
+        vars.forEach((v) => {
+          varCSS += v + ":" + computed.getPropertyValue(v).trim() + ";";
+        });
+        varCSS += "}";
+        let styleEl = clone.querySelector("style");
+        if (!styleEl) {
+          styleEl = document.createElementNS(
+            "http://www.w3.org/2000/svg",
+            "style",
+          );
+          clone.insertBefore(styleEl, clone.firstChild);
+        }
+        styleEl.textContent = varCSS + styleEl.textContent;
+        const svgStr = new XMLSerializer().serializeToString(clone);
+        const blob = new Blob([svgStr], {
+          type: "image/svg+xml;charset=utf-8",
+        });
+        download(blob, "archviz-" + Date.now() + ".svg");
+        toast("SVG exported (with theme vars)");
+      } catch (e) {
+        toast("SVG export failed: " + e.message);
+        console.error(e);
+      }
+    }
+
+    async function copyToClipboard(selector) {
+      const target = findTarget(selector);
+      if (!target) {
+        toast("No export target found");
+        return;
+      }
+      try {
+        const blob = await exportBlob(target, SCALE_DEFAULT, "image/png");
+        if (navigator.clipboard && window.ClipboardItem) {
+          await navigator.clipboard.write([
+            new ClipboardItem({ "image/png": blob }),
+          ]);
+          toast("Copied to clipboard (4× PNG)");
+        } else {
+          // Fallback: data URL to console
+          const reader = new FileReader();
+          reader.onload = () => {
+            console.log("Clipboard fallback — data URL:", reader.result);
+          };
+          reader.readAsDataURL(blob);
+          toast("Clipboard unavailable — data URL logged to console");
+        }
+      } catch (e) {
+        toast("Clipboard failed: " + e.message);
+        console.error(e);
+      }
+    }
+
+    // --- Menu UI ---
+    function createMenu() {
+      const btn = document.createElement("button");
+      btn.id = "archviz-export-btn";
+      btn.textContent = "Export";
+      btn.addEventListener("click", toggleMenu);
+
+      const menu = document.createElement("div");
+      menu.id = "archviz-export-menu";
+      menu.innerHTML = `
       <button data-action="png">Export PNG <span class="shortcut">E→P</span></button>
       <button data-action="svg">Export SVG <span class="shortcut">E→S</span></button>
       <button data-action="webp">Export WebP <span class="shortcut">E→W</span></button>
       <div class="sep"></div>
       <button data-action="clipboard">Copy to Clipboard <span class="shortcut">E→C</span></button>
     `;
-    menu.addEventListener('click', (e) => {
-      const action = e.target.closest('button')?.dataset?.action;
-      if (!action) return;
-      closeMenu();
-      if (action === 'png') exportPNG();
-      else if (action === 'svg') exportSVG();
-      else if (action === 'webp') exportWebP();
-      else if (action === 'clipboard') copyToClipboard();
-    });
+      menu.addEventListener("click", (e) => {
+        const action = e.target.closest("button")?.dataset?.action;
+        if (!action) return;
+        closeMenu();
+        if (action === "png") exportPNG();
+        else if (action === "svg") exportSVG();
+        else if (action === "webp") exportWebP();
+        else if (action === "clipboard") copyToClipboard();
+      });
 
-    document.body.appendChild(btn);
-    document.body.appendChild(menu);
-  }
-
-  function toggleMenu() {
-    const menu = document.getElementById('archviz-export-menu');
-    if (menu) menu.classList.toggle('open');
-  }
-  function closeMenu() {
-    const menu = document.getElementById('archviz-export-menu');
-    if (menu) menu.classList.remove('open');
-  }
-
-  // --- Keyboard shortcuts ---
-  let pendingE = false;
-  let pendingETimer = null;
-
-  document.addEventListener('keydown', (e) => {
-    // Skip if typing in input
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
-    // Skip if OrbitControls is active (3D pages)
-    if (e.target.tagName === 'CANVAS' && document.querySelector('canvas[data-orbit]')) return;
-
-    const key = e.key.toLowerCase();
-
-    // T = cycle theme
-    if (key === 't' && !e.metaKey && !e.ctrlKey && !e.altKey) {
-      e.preventDefault();
-      window.archvizTheme?.toggleTheme();
-      return;
+      document.body.appendChild(btn);
+      document.body.appendChild(menu);
     }
 
-    // E = export menu toggle (or E→P/S/W/C two-key combo)
-    if (key === 'e' && !e.metaKey && !e.ctrlKey && !e.altKey) {
-      e.preventDefault();
+    function toggleMenu() {
+      const menu = document.getElementById("archviz-export-menu");
+      if (menu) menu.classList.toggle("open");
+    }
+    function closeMenu() {
+      const menu = document.getElementById("archviz-export-menu");
+      if (menu) menu.classList.remove("open");
+    }
+
+    // --- Keyboard shortcuts ---
+    let pendingE = false;
+    let pendingETimer = null;
+
+    document.addEventListener("keydown", (e) => {
+      // Skip if typing in input
+      if (
+        e.target.tagName === "INPUT" ||
+        e.target.tagName === "TEXTAREA" ||
+        e.target.isContentEditable
+      )
+        return;
+      // Skip if OrbitControls is active (3D pages)
+      if (
+        e.target.tagName === "CANVAS" &&
+        document.querySelector("canvas[data-orbit]")
+      )
+        return;
+
+      const key = e.key.toLowerCase();
+
+      // T = cycle theme
+      if (key === "t" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        window.archvizTheme?.toggleTheme();
+        return;
+      }
+
+      // E = export menu toggle (or E→P/S/W/C two-key combo)
+      if (key === "e" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        if (pendingE) {
+          clearTimeout(pendingETimer);
+          pendingE = false;
+          return;
+        }
+        pendingE = true;
+        toggleMenu();
+        pendingETimer = setTimeout(() => {
+          pendingE = false;
+        }, 800);
+        return;
+      }
+
+      // Two-key combos after E
       if (pendingE) {
         clearTimeout(pendingETimer);
         pendingE = false;
+        closeMenu();
+        if (key === "p") exportPNG();
+        else if (key === "s") exportSVG();
+        else if (key === "w") exportWebP();
+        else if (key === "c") copyToClipboard();
         return;
       }
-      pendingE = true;
-      toggleMenu();
-      pendingETimer = setTimeout(() => {
-        pendingE = false;
-      }, 800);
-      return;
+
+      // Escape = close menu
+      if (key === "escape") closeMenu();
+    });
+
+    // Close menu on outside click
+    document.addEventListener("click", (e) => {
+      if (
+        !e.target.closest("#archviz-export-menu") &&
+        !e.target.closest("#archviz-export-btn")
+      ) {
+        closeMenu();
+      }
+    });
+
+    // Expose API
+    window.archvizExport = {
+      exportPNG,
+      exportSVG,
+      exportWebP,
+      copyToClipboard,
+    };
+
+    // Init
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", createMenu);
+    } else {
+      createMenu();
     }
-
-    // Two-key combos after E
-    if (pendingE) {
-      clearTimeout(pendingETimer);
-      pendingE = false;
-      closeMenu();
-      if (key === 'p') exportPNG();
-      else if (key === 's') exportSVG();
-      else if (key === 'w') exportWebP();
-      else if (key === 'c') copyToClipboard();
-      return;
-    }
-
-    // Escape = close menu
-    if (key === 'escape') closeMenu();
-  });
-
-  // Close menu on outside click
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('#archviz-export-menu') && !e.target.closest('#archviz-export-btn')) {
-      closeMenu();
-    }
-  });
-
-  // Expose API
-  window.archvizExport = { exportPNG, exportSVG, exportWebP, copyToClipboard };
-
-  // Init
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', createMenu);
-  } else {
-    createMenu();
-  }
-})();
+  })();
 </script>
