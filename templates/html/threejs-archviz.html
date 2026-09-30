@@ -370,7 +370,14 @@ function createArchVizRenderer(canvas) {
   const renderer = new THREE.WebGLRenderer({
     canvas: canvas,
     antialias: true,
-    powerPreference: 'high-performance'
+    powerPreference: 'high-performance',
+    // Without this the drawing buffer is discarded once the frame has been
+    // composited, so the export module's canvas path — ctx.drawImage(
+    // renderer.domElement, …) — reads back an empty buffer and every PNG/WebP
+    // export comes out fully transparent. The cost is that the browser can no
+    // longer discard the buffer between frames, which is irrelevant for these
+    // static demos.
+    preserveDrawingBuffer: true
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, ARCHVIZ_HYGIENE.DPR_CAP));
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -452,6 +459,41 @@ const TOKENS = {
 const renderer = createArchVizRenderer(document.getElementById('canvas'));
 const scene = createArchVizScene(TOKENS.ambient);
 scene.fog = new THREE.Fog(TOKENS.ambient, 30, 80);
+
+// === ArchVizBuild Contract (minimal integration) ===
+// Full contract module: _archviz-3d-contract.html
+// For Phase 3 upgrade: integrate ArchVizBuild class, createArchVizRenderer factory
+
+// Dispose guard — clean up GPU on page unload
+window.addEventListener('beforeunload', () => {
+  if (renderer) {
+    renderer.dispose();
+    renderer.forceContextLoss();
+  }
+  scene.traverse(child => {
+    if (child.isMesh) {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+        else child.material.dispose();
+      }
+    }
+  });
+});
+
+// Light cap enforcement (max 3)
+let _lightCount = 0;
+const _origAdd = scene.add.bind(scene);
+scene.add = function(obj) {
+  if (obj.isLight) {
+    _lightCount++;
+    if (_lightCount > 3) {
+      console.warn('archviz-3d: light cap (3) reached, skipping');
+      return;
+    }
+  }
+  _origAdd(obj);
+};
 
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(15, 12, 18);
@@ -895,11 +937,11 @@ renderLoop();
   function findTarget(selector){if(selector)return document.querySelector(selector);return document.querySelector('.archviz-export-target')||document.querySelector('svg')||document.querySelector('canvas')||document.querySelector('article,.card,.canvas');}
   function canvasToBlob(canvasEl,scale,format){return new Promise((resolve,reject)=>{const tmpCanvas=document.createElement('canvas');tmpCanvas.width=canvasEl.width*scale;tmpCanvas.height=canvasEl.height*scale;const ctx=tmpCanvas.getContext('2d');ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(canvasEl,0,0,tmpCanvas.width,tmpCanvas.height);tmpCanvas.toBlob(blob=>blob?resolve(blob):reject(new Error('toBlob failed')),format||'image/png');});}
   function svgToBlob(svgEl,scale,format){return new Promise((resolve,reject)=>{const vb=svgEl.viewBox?.baseVal;const w=vb?.width||svgEl.clientWidth||800;const h=vb?.height||svgEl.clientHeight||600;const clone=svgEl.cloneNode(true);const computed=getComputedStyle(document.documentElement);const vars=['--av-surface','--av-surface-alt','--av-text-primary','--av-text-secondary','--av-text-tertiary','--av-border','--av-accent','--av-chart-1','--av-chart-2','--av-chart-3','--av-chart-4','--av-chart-5','--av-chart-6'];let varCSS=':root{';vars.forEach(v=>{varCSS+=v+':'+computed.getPropertyValue(v).trim()+';';});varCSS+='}';let styleEl=clone.querySelector('style');if(!styleEl){styleEl=document.createElementNS('http://www.w3.org/2000/svg','style');clone.insertBefore(styleEl,clone.firstChild);}styleEl.textContent=varCSS+styleEl.textContent;clone.setAttribute('width',w*scale);clone.setAttribute('height',h*scale);if(!clone.getAttribute('viewBox'))clone.setAttribute('viewBox',`0 0 ${w} ${h}`);const svgStr=new XMLSerializer().serializeToString(clone);const svgBlob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});const url=URL.createObjectURL(svgBlob);const img=new Image();img.onload=()=>{const canvas=document.createElement('canvas');canvas.width=w*scale;canvas.height=h*scale;const ctx=canvas.getContext('2d');ctx.fillStyle=computed.getPropertyValue('--av-surface').trim()||'#f5f0eb';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0);URL.revokeObjectURL(url);canvas.toBlob(blob=>{if(blob)resolve(blob);else reject(new Error('toBlob failed'));},format||'image/png');};img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('SVG load failed'));};img.src=url;});}
-  async function exportBlob(target,scale,format){scale=scale||SCALE_DEFAULT;if(target.tagName==='SVG')return svgToBlob(target,scale,format);else if(target.tagName==='CANVAS')return canvasToBlob(target,scale,format);else{const w=target.scrollWidth||target.clientWidth||800;const h=target.scrollHeight||target.clientHeight||600;const canvas=document.createElement('canvas');canvas.width=w*scale;canvas.height=h*scale;const ctx=canvas.getContext('2d');ctx.scale(scale,scale);ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--av-surface').trim()||'#f5f0eb';ctx.fillRect(0,0,w,h);const svgStr=`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml">${target.outerHTML}</div></foreignObject></svg>`;const blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});const url=URL.createObjectURL(blob);return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>{ctx.drawImage(img,0,0);URL.revokeObjectURL(url);canvas.toBlob(b=>b?resolve(b):reject(new Error('toBlob failed')),format||'image/png');};img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('HTML export failed'));};img.src=url;});}}
+  async function exportBlob(target,scale,format){scale=scale||SCALE_DEFAULT;const __t=(target.tagName||'').toLowerCase();if(__t==='svg')return svgToBlob(target,scale,format);else if(__t==='canvas')return canvasToBlob(target,scale,format);else throw new Error("this template's export target is HTML - give it an <svg> or <canvas> element to rasterize");}
   function download(blob,filename){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(url),1000);}
   async function exportPNG(selector,scale){const target=findTarget(selector);if(!target){toast('No export target found');return;}try{const blob=await exportBlob(target,scale||SCALE_DEFAULT,'image/png');download(blob,'archviz-'+Date.now()+'.png');toast('PNG exported (4× raster)');}catch(e){toast('Export failed: '+e.message);console.error(e);}}
   async function exportWebP(selector,scale){const target=findTarget(selector);if(!target){toast('No export target found');return;}try{const blob=await exportBlob(target,scale||SCALE_DEFAULT,'image/webp');download(blob,'archviz-'+Date.now()+'.webp');toast('WebP exported (4× raster)');}catch(e){toast('Export failed: '+e.message);console.error(e);}}
-  async function exportSVG(selector){const target=findTarget(selector);if(!target||target.tagName!=='SVG'){toast('SVG export requires an SVG target');return;}try{const clone=target.cloneNode(true);const computed=getComputedStyle(document.documentElement);const vars=['--av-surface','--av-surface-alt','--av-text-primary','--av-text-secondary','--av-text-tertiary','--av-border','--av-accent','--av-chart-1','--av-chart-2','--av-chart-3','--av-chart-4','--av-chart-5','--av-chart-6'];let varCSS=':root{';vars.forEach(v=>{varCSS+=v+':'+computed.getPropertyValue(v).trim()+';';});varCSS+='}';let styleEl=clone.querySelector('style');if(!styleEl){styleEl=document.createElementNS('http://www.w3.org/2000/svg','style');clone.insertBefore(styleEl,clone.firstChild);}styleEl.textContent=varCSS+styleEl.textContent;const svgStr=new XMLSerializer().serializeToString(clone);const blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});download(blob,'archviz-'+Date.now()+'.svg');toast('SVG exported (with theme vars)');}catch(e){toast('SVG export failed: '+e.message);console.error(e);}}
+  async function exportSVG(selector){const target=findTarget(selector);if(!target||(target.tagName||'').toLowerCase()!=='svg'){toast('SVG export requires an SVG target');return;}try{const clone=target.cloneNode(true);const computed=getComputedStyle(document.documentElement);const vars=['--av-surface','--av-surface-alt','--av-text-primary','--av-text-secondary','--av-text-tertiary','--av-border','--av-accent','--av-chart-1','--av-chart-2','--av-chart-3','--av-chart-4','--av-chart-5','--av-chart-6'];let varCSS=':root{';vars.forEach(v=>{varCSS+=v+':'+computed.getPropertyValue(v).trim()+';';});varCSS+='}';let styleEl=clone.querySelector('style');if(!styleEl){styleEl=document.createElementNS('http://www.w3.org/2000/svg','style');clone.insertBefore(styleEl,clone.firstChild);}styleEl.textContent=varCSS+styleEl.textContent;const svgStr=new XMLSerializer().serializeToString(clone);const blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});download(blob,'archviz-'+Date.now()+'.svg');toast('SVG exported (with theme vars)');}catch(e){toast('SVG export failed: '+e.message);console.error(e);}}
   async function copyToClipboard(selector){const target=findTarget(selector);if(!target){toast('No export target found');return;}try{const blob=await exportBlob(target,SCALE_DEFAULT,'image/png');if(navigator.clipboard&&window.ClipboardItem){await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);toast('Copied to clipboard (4× PNG)');}else{const reader=new FileReader();reader.onload=()=>{console.log('Clipboard fallback — data URL:',reader.result);};reader.readAsDataURL(blob);toast('Clipboard unavailable — data URL logged to console');}}catch(e){toast('Clipboard failed: '+e.message);console.error(e);}}
   function createMenu(){const btn=document.createElement('button');btn.id='archviz-export-btn';btn.textContent='Export';btn.addEventListener('click',toggleMenu);const menu=document.createElement('div');menu.id='archviz-export-menu';menu.innerHTML='<button data-action="png">Export PNG <span class="shortcut">E→P</span></button><button data-action="svg">Export SVG <span class="shortcut">E→S</span></button><button data-action="webp">Export WebP <span class="shortcut">E→W</span></button><div class="sep"></div><button data-action="clipboard">Copy to Clipboard <span class="shortcut">E→C</span></button>';menu.addEventListener('click',(e)=>{const action=e.target.closest('button')?.dataset?.action;if(!action)return;closeMenu();if(action==='png')exportPNG();else if(action==='svg')exportSVG();else if(action==='webp')exportWebP();else if(action==='clipboard')copyToClipboard();});document.body.appendChild(btn);document.body.appendChild(menu);}
   function toggleMenu(){const menu=document.getElementById('archviz-export-menu');if(menu)menu.classList.toggle('open');}
@@ -910,41 +952,6 @@ renderLoop();
   window.archvizExport={exportPNG,exportSVG,exportWebP,copyToClipboard};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',createMenu);else createMenu();
 })();
-
-// === ArchVizBuild Contract (minimal integration) ===
-// Full contract module: _archviz-3d-contract.html
-// For Phase 3 upgrade: integrate ArchVizBuild class, createArchVizRenderer factory
-
-// Dispose guard — clean up GPU on page unload
-window.addEventListener('beforeunload', () => {
-  if (renderer) {
-    renderer.dispose();
-    renderer.forceContextLoss();
-  }
-  scene.traverse(child => {
-    if (child.isMesh) {
-      if (child.geometry) child.geometry.dispose();
-      if (child.material) {
-        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
-        else child.material.dispose();
-      }
-    }
-  });
-});
-
-// Light cap enforcement (max 3)
-let _lightCount = 0;
-const _origAdd = scene.add.bind(scene);
-scene.add = function(obj) {
-  if (obj.isLight) {
-    _lightCount++;
-    if (_lightCount > 3) {
-      console.warn('archviz-3d: light cap (3) reached, skipping');
-      return;
-    }
-  }
-  _origAdd(obj);
-};
 
 </script>
 </body>

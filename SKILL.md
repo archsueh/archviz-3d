@@ -8,7 +8,7 @@ description: |
   超出自包含复杂度时引导切 Vite + R3F。
 license: MIT
 metadata:
-  version: 0.6.0
+  version: 0.6.1
   source: https://github.com/archsueh/archviz-3d
   risk: safe
   author: archsueh
@@ -438,6 +438,32 @@ _updateExplode(t) {
 Shared with archviz-diagram (2D): `_archviz-theme.html` + `_archviz-export.html`.
 - T = cycle theme, E = export menu
 - 3D canvas has `data-orbit` to prevent keyboard conflicts
+
+**Export target:** `findTarget()` resolves `.archviz-export-target`, then `svg`,
+then `canvas`. In these 3D templates there is **no `<svg>` element**, so export
+lands on the WebGL canvas and SVG export is unavailable by construction (it
+fails fast with "SVG export requires an SVG target"). PNG / WebP upscale the
+canvas at 4×.
+
+Two hard requirements, both of which were silently violated until v0.6.1:
+
+1. **`preserveDrawingBuffer: true`** on the `WebGLRenderer`. Without it the
+   drawing buffer is discarded after compositing and every export is fully
+   transparent — a valid-looking PNG with zero opaque pixels. The canvas
+   `renderAtScale(ctx, scale)` hook that would avoid this is declared by the
+   export module but implemented by no template in this repo or in
+   archviz-diagram, so the upscale fallback is always what runs.
+2. **Never hand-minify an inline copy of the export module.** That is how
+   `threejs-floorplan.html` lost a `}` and stopped parsing entirely — the
+   Export button simply never appeared, with one `SyntaxError` as the only
+   clue.
+
+⚠️ **This repo has no sync script and no CI.** `_archviz-theme.html` and
+`_archviz-export.html` are stale forks of archviz-diagram's modules (last
+touched 2026-06-13; the theme partial still advertises "4 palettes" where
+archviz-diagram now ships 11). The two templates additionally carry their own
+minified inline copies, so a single export fix has to be applied in three
+places. Re-syncing the partials is an open decision — see `CHANGELOG.md`.
 
 ## Dials (inherited from archviz-diagram)
 

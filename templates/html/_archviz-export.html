@@ -157,7 +157,12 @@
       const svgBlob = new Blob([svgStr], {type: 'image/svg+xml;charset=utf-8'});
       const url = URL.createObjectURL(svgBlob);
       const img = new Image();
+      const timer = setTimeout(() => {
+        URL.revokeObjectURL(url);
+        reject(new Error('SVG rasterization timed out'));
+      }, 10000);
       img.onload = () => {
+        clearTimeout(timer);
         const canvas = document.createElement('canvas');
         canvas.width = w * scale;
         canvas.height = h * scale;
@@ -172,7 +177,7 @@
           else reject(new Error('toBlob failed'));
         }, format || 'image/png');
       };
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('SVG load failed')); };
+      img.onerror = () => { clearTimeout(timer); URL.revokeObjectURL(url); reject(new Error('SVG load failed')); };
       img.src = url;
     });
   }
@@ -206,42 +211,22 @@
   // --- Generic export: auto-detect SVG vs Canvas vs HTML ---
   async function exportBlob(target, scale, format) {
     scale = scale || SCALE_DEFAULT;
-    if (target.tagName === 'SVG') {
+    // Elements in the SVG namespace report tagName in lowercase ('svg'),
+    // while HTML elements report uppercase ('CANVAS'). Comparing against 'SVG'
+    // never matched, so every SVG target fell through to the HTML branch
+    // below, which hung the image decoder with no way to recover.
+    const tag = (target.tagName || '').toLowerCase();
+    if (tag === 'svg') {
       return svgToBlob(target, scale, format);
-    } else if (target.tagName === 'CANVAS') {
+    } else if (tag === 'canvas') {
       return canvasToBlob(target, scale, format);
     } else {
-      // HTML fallback — screenshot via html2canvas if available, else canvas draw
-      const w = target.scrollWidth || target.clientWidth || 800;
-      const h = target.scrollHeight || target.clientHeight || 600;
-      const canvas = document.createElement('canvas');
-      canvas.width = w * scale;
-      canvas.height = h * scale;
-      const ctx = canvas.getContext('2d');
-      ctx.scale(scale, scale);
-      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--av-surface').trim() || '#f5f0eb';
-      ctx.fillRect(0, 0, w, h);
-      // Use foreignObject approach
-      const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
-        <foreignObject width="100%" height="100%">
-          <div xmlns="http://www.w3.org/1999/xhtml">${target.outerHTML}</div>
-        </foreignObject>
-      </svg>`;
-      const blob = new Blob([svgStr], {type: 'image/svg+xml;charset=utf-8'});
-      const url = URL.createObjectURL(blob);
-      return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => {
-          ctx.drawImage(img, 0, 0);
-          URL.revokeObjectURL(url);
-          canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), format || 'image/png');
-        };
-        img.onerror = () => {
-          URL.revokeObjectURL(url);
-          reject(new Error('HTML export failed — use SVG or canvas target'));
-        };
-        img.src = url;
-      });
+      // HTML targets are deliberately not rasterized: wrapping outerHTML in a
+      // <foreignObject> and loading it as an <img> blocks the main thread on
+      // any non-trivial subtree, so not even a timeout guard can fire.
+      throw new Error(
+        "this template's export target is HTML - give it an <svg> or <canvas> element to rasterize"
+      );
     }
   }
 
@@ -280,7 +265,7 @@
 
   async function exportSVG(selector) {
     const target = findTarget(selector);
-    if (!target || target.tagName !== 'SVG') { toast('SVG export requires an SVG target'); return; }
+    if (!target || (target.tagName || '').toLowerCase() !== 'svg') { toast('SVG export requires an SVG target'); return; }
     try {
       const clone = target.cloneNode(true);
       const computed = getComputedStyle(document.documentElement);

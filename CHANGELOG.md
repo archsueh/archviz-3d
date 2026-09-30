@@ -1,5 +1,59 @@
 # Changelog
 
+## v0.6.1 (2026-09-30)
+
+Export chain was non-functional in both templates. Reproduced in headless
+Chromium before and after each fix.
+
+### Fixed
+- **`threejs-floorplan.html` export was completely dead.** A hand-minified
+  inline copy of the export module had lost the `}` that closes
+  `blob=>{…}` in `svgToBlob`, so `)`, `;`, `}` landed one token out of
+  place. The whole `<script>` failed to parse (`SyntaxError: Unexpected
+  token ')'`), `window.archvizExport` was never defined, and the Export
+  button never appeared. One character: `reject(…)),format` →
+  `reject(…));},format`.
+- **PNG and WebP export were 100% transparent.** `WebGLRenderer` was
+  created without `preserveDrawingBuffer`, so once a frame had been
+  composited the drawing buffer was discarded and the export module's
+  `ctx.drawImage(renderer.domElement, …)` path read back an empty buffer.
+  A 5760×3600 PNG containing exactly one colour and 0% opaque pixels is
+  what "export" produced. Both templates now pass
+  `preserveDrawingBuffer: true`.
+- **SVG-namespace `tagName` comparison never matched.** SVG elements report
+  a lowercase `tagName` (`"svg"`), HTML elements an uppercase one
+  (`"CANVAS"`). Comparing against `'SVG'` sent every SVG target down the
+  HTML branch. Both inline copies and the shared `_archviz-export.html`
+  partial now lowercase the tag first.
+- **Removed the `<foreignObject>` HTML fallback.** Wrapping `outerHTML` in a
+  `<foreignObject>` and loading it as an `<img>` blocks Chromium's image
+  decoder on any non-trivial subtree — it hangs the main thread so
+  completely that even a timeout guard cannot fire. HTML targets now fail
+  fast with an explanatory error instead of hanging forever.
+- **`ReferenceError: scene is not defined` on every `threejs-archviz.html`
+  load.** The "ArchVizBuild Contract" block sat in a classic `<script>` but
+  referenced `scene` / `renderer`, which are `const` at module scope in the
+  preceding `type="module"` script. The block threw on the first statement,
+  so the GPU dispose guard and the light cap never installed. It now lives
+  inside the module, immediately after `scene` is initialised and before the
+  `addLight()` calls — the light cap only works if `scene.add` is wrapped
+  before the scene is populated.
+- Added a 10s timeout guard to the partial's `svgToBlob` so a stalled
+  rasterization rejects instead of leaving a promise pending forever.
+
+### Changed
+- Metadata version bumped to 0.6.1.
+
+### Known, not fixed here
+- `canvasToBlob` checks for a `canvas.renderAtScale(ctx, scale)` hook that no
+  template in this repo — or in archviz-diagram — implements. The branch is
+  dead code in the whole family; canvas export always takes the upscale
+  fallback. Left as-is for consistency.
+- The two inline copies of the export module remain hand-minified, which is
+  what corrupted `threejs-floorplan.html` in the first place. There is no
+  sync script and no CI in this repo, so the partials have drifted from
+  archviz-diagram since 2026-06-13. See the note in `SKILL.md`.
+
 ## v0.5.0 (2026-06-23)
 
 ### Added
