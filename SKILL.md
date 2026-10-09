@@ -8,7 +8,7 @@ description: |
   超出自包含复杂度时引导切 Vite + R3F。
 license: MIT
 metadata:
-  version: 0.7.1
+  version: 0.7.2
   source: https://github.com/archsueh/archviz-3d
   risk: safe
   author: archsueh
@@ -61,6 +61,8 @@ need realistic/complex models?
   YES → project-directory: index.html + assets/*.glb
   NO  → self-contained: single .html file (default)
 ```
+
+**自包含 HTML vs 完整 App 的阈值**（部件数 / 物理交互 / 部署方式）：`references/3d/boundary-declaration.md`。
 
 ## Tech Stack
 
@@ -384,6 +386,7 @@ archviz-3d/
 └── references/
     ├── 3d-models-sources.md   # 免费 CC0 3D 模型 / HDRI / 贴图来源清单
     ├── gotchas.md             # 3D 空间 gotchas —— 每次真实任务后追加
+    ├── 3d/boundary-declaration.md  # 自包含HTML vs 完整App 阈值
     ├── mechlab-analysis.md    # （维护者）mechlab 参考分析，非 agent 面
     └── threejs-gotchas.md     # （维护者）重定向占位，内容已并入本文件 § Key Gotchas
 ```

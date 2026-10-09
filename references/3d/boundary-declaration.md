@@ -1,5 +1,15 @@
 # archviz-3d 边界声明
 
+> **本文件与 SKILL.md 有重叠，以 SKILL.md 为准。** 下面 `## ArchVizBuild Contract`、
+> `### 工程卫生常量`、`## CDN 路径` 三节是 SKILL.md 同名小节（`## ArchVizBuild Contract`、
+> `## Engineering Hygiene Constants`、`## CDN Importmap (verified)`）的复述，任一处改动都要
+> 同步；本文件**独有**的部分是 `## 自包含HTML vs 完整App的边界` 的阈值表 —— 那三节保留在这里
+> 只是为了让本文件可以单独阅读。
+>
+> 2026-10-09 之前，本文件在仓库里**没有任何入口**：`coverage` 的 glob 只扫
+> `references/*.md`（非递归），SKILL.md 与 Architecture 树都没点名它，唯一提到它的是
+> `CHANGELOG.md` 的一行。现在 SKILL.md 的 `## Skill Boundaries` 与 Architecture 树都指向它。
+
 ## 自包含HTML vs 完整App的边界
 
 archviz-3d 的核心交付形态是**自包含HTML**（CDN importmap，零构建步骤）。当场景复杂度超过以下阈值时，应指引用户切到 Vite + R3F 完整应用。

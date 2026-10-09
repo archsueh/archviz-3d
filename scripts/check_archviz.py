@@ -32,6 +32,17 @@ Checks
             a semantic regex, never by grepping for the bare number: a table
             row `| 14 | Pyramid / funnel |` uses 14 as an ordinal, and a naive
             digit search reports it as a stale count.
+  coverage  Every file matched by a glob is reachable from the index file, by a
+            transitive walk. Delete one row from an index and both the declared
+            count and the file count stay correct — so `counts` cannot see it,
+            and the file goes dark.
+  deps      Every third-party import is declared in some manifest, and (since
+            kit v2) every declared distribution is imported somewhere. The
+            reverse direction is what catches a dependency that was dropped
+            from the code but left in requirements.txt.
+  pycompile Every `.py` in the repo parses, including files nothing imports.
+            `deps` skips unparseable files by design, so this is the only gate
+            that sees a markdown fragment wearing a `.py` extension.
   cjk       Declared files decode as UTF-8, HTML files declare a charset, and
             no file carries a mojibake signature. This family is CJK-first, so
             an encoding fault is a content fault, not a cosmetic one.
@@ -60,10 +71,17 @@ import re
 import sys
 from pathlib import Path
 
-KIT_VERSION = 1
+KIT_VERSION = 2
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_NAME = "archviz-checks.json"
+
+# Directories `pycompile` never descends into. A vendored or generated tree is
+# not this repo's source, and `.git` alone would multiply the file count.
+DEFAULT_SKIP_DIRS = (
+    ".git", ".venv", "venv", "node_modules", "__pycache__",
+    "build", "dist", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+)
 
 SEMVER = r"\d+\.\d+\.\d+"
 BARE_SEMVER_RE = re.compile(rf"\A{SEMVER}\Z")
@@ -615,8 +633,32 @@ def check_coverage(root: Path, cfg: dict) -> Result:
     return r
 
 
+def _dist_names_in_array(body: str) -> set[str]:
+    """Distribution names inside a TOML array literal, version specifiers dropped."""
+    out: set[str] = set()
+    for item in re.findall(r'"([^"]+)"|\'([^\']+)\'', body):
+        raw = (item[0] or item[1]).strip()
+        if not raw:
+            continue
+        # Drop any version specifier / environment marker / extras.
+        name = re.split(r"[<>=!~;\[\s]", raw, maxsplit=1)[0].strip()
+        if name:
+            out.add(name.lower())
+    return out
+
+
 def _declared_distributions(root: Path, spec: dict) -> set[str]:
-    """Distribution names declared by requirements.txt and pyproject.toml."""
+    """Distribution names *runtime* code may import: requirements.txt plus the
+    `[project]` dependency arrays of pyproject.toml.
+
+    Scoped on purpose, and the scoping is load-bearing now that the reverse
+    check exists. A loose `name = [...]` scan over the whole file also collects
+    `[build-system] requires = ["hatchling"]` and
+    `[tool.hatch.build.targets.wheel] packages = ["archviz_diagram"]` — neither
+    is a runtime dependency, and "declared but unused" would report the build
+    backend as a dead dependency. Measured 2026-10-09: the loose version did
+    exactly that.
+    """
     names: set[str] = set()
 
     req = spec.get("requirements")
@@ -625,30 +667,52 @@ def _declared_distributions(root: Path, spec: dict) -> set[str]:
             line = line.split("#", 1)[0].strip()
             if not line or line.startswith("-"):
                 continue
-            # Drop any version specifier / environment marker / extras.
             name = re.split(r"[<>=!~;\[\s]", line, maxsplit=1)[0].strip()
             if name:
                 names.add(name.lower())
 
     pp = spec.get("pyproject")
-    if pp and (root / pp).exists():
-        # No tomllib before 3.11, and the kit targets 3.8+. A regex over the
-        # dependency arrays is enough: these are one-name-per-string lists.
-        text = read_text(root / pp)
-        for block in re.finditer(r"(?ms)(?:^\s*dependencies\s*=|^\s*\w+\s*=)\s*\[(.*?)\]", text):
-            for item in re.findall(r'"([^"]+)"|\'([^\']+)\'', block.group(1)):
-                raw = (item[0] or item[1]).strip()
-                if not raw:
-                    continue
-                name = re.split(r"[<>=!~;\[\s]", raw, maxsplit=1)[0].strip()
-                if name:
-                    names.add(name.lower())
+    if not (pp and (root / pp).exists()):
+        return names
+
+    # No tomllib before 3.11 and the kit targets 3.8+, so this is a small
+    # section-aware scan rather than a TOML parse. It only has to be right about
+    # *which* arrays hold runtime dependencies.
+    section = ""
+    pending: list[str] | None = None
+    for raw in read_text(root / pp).splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if line.startswith("["):
+            section = line.strip("[]").strip()
+            pending = None
+            continue
+        if pending is not None:
+            pending.append(line)
+            if "]" in line:
+                names |= _dist_names_in_array(" ".join(pending))
+                pending = None
+            continue
+        if "=" not in line:
+            continue
+        key, _, value = (part.strip() for part in line.partition("="))
+        wanted = (section == "project" and key == "dependencies") or \
+                 section == "project.optional-dependencies"
+        if not (wanted and value.startswith("[")):
+            continue
+        if "]" in value:
+            names |= _dist_names_in_array(value)
+        else:
+            pending = [value]
+
     return names
 
 
 def check_deps(root: Path, cfg: dict) -> Result:
-    """Every third-party import in the repo must be declared somewhere.
+    """Reconcile imports against manifests — in both directions.
 
+    Forward: every third-party import in the repo must be declared somewhere.
     Same disease as the version written in four places: the set of imports is a
     fact, and the set of declared dependencies is the same fact written down
     again — so they drift silently. Measured across the family on 2026-10-09,
@@ -656,6 +720,12 @@ def check_deps(root: Path, cfg: dict) -> Result:
     (Pillow, playwright — no manifest at all), archviz-animated (matplotlib,
     numpy, scipy), archviz-3d and archviz-sketch (Pillow), archviz-diagram
     (PyYAML, pandas).
+
+    Reverse (kit v2): every declared distribution must be imported somewhere.
+    The forward check is structurally blind to this — a package dropped from the
+    code but left in `requirements.txt` is declared, so nothing complains.
+    Exemptions go in `deps.unused_exempt` and must state a reason; that is how a
+    CLI-only tool such as `termaid` is recorded rather than hidden.
 
     This is deliberately *not* implemented as `pip install -r … && compileall`.
     Byte-compilation never imports anything, so that combination detects zero
@@ -713,6 +783,15 @@ def check_deps(root: Path, cfg: dict) -> Result:
         if not str(why).strip():
             r.fail(f"deps.exempt 里 {mod} 没有写明理由 —— 豁免必须留下原因，否则它就是隐藏")
 
+    unused_exempt_raw = spec.get("unused_exempt", {})
+    for dist, why in unused_exempt_raw.items():
+        if not str(why).strip():
+            r.fail(f"deps.unused_exempt 里 {dist} 没有写明理由 —— 豁免必须留下原因，否则它就是隐藏")
+    # `_declared_distributions` lowercases every name it collects, so the
+    # exemption keys have to be lowercased too — otherwise `{"Pillow": …}` is
+    # silently a different name and the exemption looks like it does nothing.
+    unused_exempt = {str(k).lower() for k in unused_exempt_raw}
+
     undeclared: list[str] = []
     for mod in sorted(imported):
         if mod in exempt:
@@ -721,14 +800,125 @@ def check_deps(root: Path, cfg: dict) -> Result:
             continue
         undeclared.append(f"{mod}（{', '.join(sorted(imported[mod]))}）")
 
+    # Reverse direction. The forward check cannot see this: a distribution that
+    # was dropped from the code but left in requirements.txt is declared, so
+    # nothing complains, and a clean install keeps pulling a package the skill
+    # never uses. Measured 2026-10-09: archviz-diagram declared `seaborn>=0.12`
+    # whose only occurrence in the whole repo is a *commented-out*
+    # `plt.style.use('seaborn-v0_8-whitegrid')` in examples/.
+    #
+    # Strict, with an explicit reason-bearing allowlist rather than a warning.
+    # A warning nobody reads is not a gate, and the family already requires a
+    # stated reason for every exemption. `termaid` is the case that makes the
+    # allowlist necessary: it is invoked as a CLI (`cat x.mmd | termaid --theme
+    # mono`), never imported, so an AST-based check is structurally blind to it.
+    used_dists = {module_map.get(m.lower(), m.lower()) for m in imported}
+    unused: list[str] = [
+        dist for dist in sorted(declared)
+        if dist not in used_dists and dist not in unused_exempt and dist not in self_pkgs
+    ]
+
     if undeclared:
         r.fail(
             f"{len(undeclared)}/{len(imported)} 个第三方 import 未在任何清单里声明 —— "
             "干净检出会直接 ImportError: " + "; ".join(undeclared)
         )
+    if unused:
+        r.fail(
+            f"{len(unused)}/{len(declared)} 个已声明的依赖没有任何代码 import —— "
+            "要么删掉声明，要么写进 deps.unused_exempt 并说明它怎么被用到: "
+            + ", ".join(unused)
+        )
+    if not undeclared and not unused:
+        tails = []
+        if exempt:
+            tails.append(f"{len(exempt)} 个豁免")
+        if unused_exempt_raw:
+            tails.append(f"{len(unused_exempt_raw)} 个未用豁免")
+        tail = f"（{'、'.join(tails)}）" if tails else ""
+        checked = [d for d in declared if d not in self_pkgs]
+        r.note(
+            f"{len(files)} 个 .py 的 {len(imported)} 个第三方 import 全部已声明，"
+            f"{len(checked)} 个声明全部被用到{tail}"
+        )
+
+    return r
+
+
+def check_pycompile(root: Path, cfg: dict) -> Result:
+    """Every `.py` in the repo must parse — including the ones nothing imports.
+
+    `deps` cannot see this, and that is by design on its side: it calls
+    `ast.parse` on each file and *skips* whatever raises `SyntaxError`, because a
+    file it cannot parse simply contributes no imports. Correct for `deps`,
+    fatal as a gate. Measured 2026-10-09, that gap held a real defect:
+    `archviz-diagram/examples/deliverables-python-bar.py` is a markdown fragment
+    wearing a `.py` extension — a closing ``` fence on line 33, then a bullet
+    list. It landed in `41c50aa` (the v0.0.4 release) and has never once
+    compiled. Nothing referenced it, so nothing ever noticed.
+
+    Deliberately not `python -m compileall`. This walks the worktree with a skip
+    list and uses the builtin `compile()`, so it writes no `__pycache__` into the
+    tree it is inspecting — the previous `compileall -q scripts <pkg>` steps did,
+    which twice put `.pyc` files into commits. Those steps also covered only two
+    directories, and the family's only broken file lived in a third one.
+    """
+    r = Result("pycompile")
+    spec = cfg.get("pycompile")
+    if not spec:
+        r.skip("config 未声明 pycompile 段")
+        return r
+
+    skip = set(spec.get("skip_dirs", DEFAULT_SKIP_DIRS))
+    files: list[Path] = []
+    for pattern in spec.get("globs", ["**/*.py"]):
+        for p in root.glob(pattern):
+            if not p.is_file():
+                continue
+            if skip & set(p.relative_to(root).parts):
+                continue
+            files.append(p)
+    files = sorted(set(files))
+    if not files:
+        r.fail(
+            f"pycompile.globs 没匹配到任何 .py —— 配置写错了？（{spec.get('globs')}）"
+            " 一个恒真的编译检查比没有检查更糟"
+        )
+        return r
+
+    exempt = spec.get("exempt", {})
+    for rel, why in exempt.items():
+        if not str(why).strip():
+            r.fail(f"pycompile.exempt 里 {rel} 没有写明理由 —— 豁免必须留下原因，否则它就是隐藏")
+
+    broken: list[str] = []
+    for p in files:
+        rel = p.relative_to(root).as_posix()
+        if rel in exempt:
+            continue
+        try:
+            src = read_text(p)
+        except UnicodeDecodeError as e:
+            broken.append(f"{rel}（不是合法 UTF-8：{e}）")
+            continue
+        try:
+            compile(src, rel, "exec")
+        except SyntaxError as e:
+            broken.append(f"{rel}:{e.lineno} {e.msg}")
+        except ValueError as e:
+            # `compile()` raises ValueError, not SyntaxError, for source
+            # containing null bytes — the same class of "this is not a Python
+            # file" defect, so it belongs in the same failure list.
+            broken.append(f"{rel}: {e}")
+
+    if broken:
+        r.fail(
+            f"{len(broken)}/{len(files)} 个 .py 无法编译 —— 任何 import 它的路径都会直接 "
+            "SyntaxError，而它可能只是改了扩展名的文档: " + "; ".join(broken)
+        )
     else:
         tail = f"（{len(exempt)} 个豁免）" if exempt else ""
-        r.note(f"{len(files)} 个 .py 的 {len(imported)} 个第三方 import 全部已声明{tail}")
+        r.note(f"{len(files)} 个 .py 全部可编译{tail}")
 
     return r
 
@@ -850,6 +1040,7 @@ CHECKS = {
     "counts": check_counts,
     "coverage": check_coverage,
     "deps": check_deps,
+    "pycompile": check_pycompile,
     "cjk": check_cjk,
     "palette": check_palette,
 }
@@ -894,6 +1085,7 @@ FIXTURE_CONFIG = {
         "self_packages": ["demo_pkg"],
         "map": {"PIL": "Pillow"},
     },
+    "pycompile": {"globs": ["**/*.py"], "skip_dirs": [".git", "node_modules", "__pycache__"]},
 }
 
 GOOD_REQUIREMENTS = "# demo\nrequests>=2.0\nPillow>=10.0\n"
@@ -919,9 +1111,23 @@ GOOD_HTML = '<!DOCTYPE html>\n<html><head><meta charset="utf-8"></head><body>水
 GOOD_REF = "# Reference\n\nBody.\n"
 GOOD_REF_ORPHAN = "# Orphan\n\nNever named by SKILL.md.\n"
 GOOD_USES_REQUESTS = "import os\nimport requests\n"
+GOOD_USES_PIL = "from PIL import Image\n"
+
+# The real defect this kit was extended to catch, reduced to its shape: a closing
+# markdown fence, then a bullet list with a `→` in it. Found verbatim in
+# archviz-diagram/examples/deliverables-python-bar.py on 2026-10-09.
+GOOD_MARKDOWN_AS_PY = (
+    "import plotly.express as px\n"
+    "\n"
+    "fig = px.bar(df, x='Phase', y='Weeks')\n"
+    "```\n"
+    "\n"
+    "**Notes (per skill):**\n"
+    "- Env=deliverables → full Python.\n"
+)
 
 
-def write_fixture(tmp: Path, **overrides: str) -> None:
+def write_fixture(tmp: Path, **overrides: str | bytes) -> None:
     base = {
         "SKILL.md": GOOD_SKILL,
         "engine.py": GOOD_ENGINE,
@@ -934,12 +1140,19 @@ def write_fixture(tmp: Path, **overrides: str) -> None:
         "references/beta.md": GOOD_REF,
         "requirements.txt": GOOD_REQUIREMENTS,
         "uses_requests.py": GOOD_USES_REQUESTS,
+        "uses_pil.py": GOOD_USES_PIL,
     }
     base.update(overrides)
     for name, content in base.items():
         path = tmp / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+        if isinstance(content, bytes):
+            # Only a raw byte payload can express "this file is not UTF-8" —
+            # decoding to `latin-1` first and re-encoding as UTF-8 would quietly
+            # produce a valid file and make the fixture vacuous.
+            path.write_bytes(content)
+        else:
+            path.write_text(content, encoding="utf-8")
 
 
 def run_check(tmp: Path, name: str, cfg: dict) -> bool:
@@ -1013,17 +1226,71 @@ def self_test() -> int:
          False),
         ("coverage_glob_matches_nothing", "coverage", {},
          {"coverage": [{**COVERAGE_SPEC, "globs": ["nowhere/*.md"]}]}, False),
-        # deps: reconcile imports against manifests.
+        # deps: reconcile imports against manifests, both directions.
         ("deps_ok", "deps", {}, {}, True),
-        ("deps_undeclared_import", "deps", {"uses_requests.py": "import boto3\n"}, {}, False),
-        ("deps_module_to_dist_name", "deps", {"uses_requests.py": "from PIL import Image\n"}, {}, True),
-        ("deps_stdlib_is_not_a_dependency", "deps", {"uses_requests.py": "import os\nimport json\n"}, {}, True),
+        ("deps_undeclared_import", "deps",
+         {"uses_requests.py": "import requests\nimport boto3\n"}, {}, False),
+        ("deps_module_to_dist_name", "deps",
+         {"uses_requests.py": "import requests\nfrom PIL import Image\n"}, {}, True),
+        ("deps_stdlib_is_not_a_dependency", "deps",
+         {"uses_requests.py": "import os\nimport json\nimport requests\n"}, {}, True),
         ("deps_local_package_is_not_a_dependency", "deps",
-         {"uses_requests.py": "import demo_pkg\n"}, {}, True),
-        ("deps_exempt_with_reason", "deps", {"uses_requests.py": "import boto3\n"},
+         {"uses_requests.py": "import requests\nimport demo_pkg\n"}, {}, True),
+        ("deps_exempt_with_reason", "deps", {"uses_requests.py": "import requests\nimport boto3\n"},
          {"deps.exempt": {"boto3": "optional S3 export, documented in README"}}, True),
-        ("deps_exempt_without_reason", "deps", {"uses_requests.py": "import boto3\n"},
+        ("deps_exempt_without_reason", "deps", {"uses_requests.py": "import requests\nimport boto3\n"},
          {"deps.exempt": {"boto3": " "}}, False),
+        # Reverse direction. The forward check is structurally blind to a
+        # package that was dropped from the code but left in requirements.txt.
+        ("deps_unused_declaration", "deps", {"uses_pil.py": ""}, {}, False),
+        ("deps_unused_exempt_with_reason", "deps", {"uses_pil.py": ""},
+         {"deps.unused_exempt": {"Pillow": "invoked as a CLI only, never imported"}}, True),
+        ("deps_unused_exempt_without_reason", "deps", {"uses_pil.py": ""},
+         {"deps.unused_exempt": {"Pillow": "   "}}, False),
+        ("deps_optional_extra_import_is_enough", "deps",
+         {"uses_requests.py": "import requests\n", "uses_pil.py": "from PIL import Image\n"}, {}, True),
+        # Manifest scoping. The reverse check is only sound if "declared" means
+        # *runtime* dependency; a loose scan over pyproject.toml also collects
+        # the build backend and the wheel package list, which would then be
+        # reported as unused dependencies.
+        ("deps_build_backend_is_not_a_dependency", "deps",
+         {"pyproject.toml": '[build-system]\nrequires = ["hatchling"]\n\n'
+                           '[project]\nname = "demo"\nversion = "1.2.3"\n'}, {}, True),
+        ("deps_tool_section_is_not_a_dependency", "deps",
+         {"pyproject.toml": GOOD_PYPROJECT
+                           + '\n[tool.hatch.build.targets.wheel]\npackages = ["demo_pkg"]\n'}, {}, True),
+        ("deps_optional_dependencies_are_collected", "deps",
+         {"pyproject.toml": GOOD_PYPROJECT
+                           + '\n[project.optional-dependencies]\nmcp = ["boto3>=1.0"]\n',
+          "uses_requests.py": "import requests\nimport boto3\n"}, {}, True),
+        ("deps_multiline_dependency_array", "deps",
+         {"pyproject.toml": '[project]\nname = "demo"\nversion = "1.2.3"\n'
+                           'dependencies = [\n  "boto3>=1.0",\n]\n',
+          "uses_requests.py": "import requests\nimport boto3\n"}, {}, True),
+        # pycompile. `deps` skips files it cannot parse — correct for `deps`,
+        # fatal as a gate — so the two are pinned as a complementary pair over
+        # the same override: the markdown-wearing-a-.py-extension defect is
+        # invisible to `deps` and fatal to `pycompile`.
+        ("deps_blind_to_unparseable_file", "deps",
+         {"examples/x.py": GOOD_MARKDOWN_AS_PY}, {}, True),
+        ("pycompile_sees_unparseable_file", "pycompile",
+         {"examples/x.py": GOOD_MARKDOWN_AS_PY}, {}, False),
+        ("pycompile_ok", "pycompile", {}, {}, True),
+        ("pycompile_syntax_error", "pycompile", {"examples/x.py": "def f(:\n"}, {}, False),
+        ("pycompile_null_bytes", "pycompile", {"examples/x.py": "x = 1\x00\n"}, {}, False),
+        ("pycompile_non_utf8", "pycompile", {"examples/x.py": b"# \xff\xfe\n"}, {}, False),
+        # Anti-polarity: proves the skip list is applied, so a failure means
+        # "this repo's source is broken", not "the walker found something".
+        ("pycompile_skip_dirs_are_not_scanned", "pycompile",
+         {"node_modules/x.py": "def f(:\n"}, {}, True),
+        ("pycompile_glob_matches_nothing", "pycompile", {},
+         {"pycompile": {"globs": ["nowhere/*.py"]}}, False),
+        ("pycompile_exempt_with_reason", "pycompile",
+         {"examples/x.py": GOOD_MARKDOWN_AS_PY},
+         {"pycompile.exempt": {"examples/x.py": "generated sample, regenerated by CI"}}, True),
+        ("pycompile_exempt_without_reason", "pycompile",
+         {"examples/x.py": GOOD_MARKDOWN_AS_PY},
+         {"pycompile.exempt": {"examples/x.py": "  "}}, False),
     ]
 
     failures = 0
@@ -1139,7 +1406,7 @@ def main(argv: list[str]) -> int:
 def _config_key(check: str) -> str:
     return {"version": "version", "budget": "skill_md_max_bytes", "routing": "routing",
             "counts": "counts", "coverage": "coverage", "deps": "deps",
-            "cjk": "cjk", "palette": "palette"}[check]
+            "pycompile": "pycompile", "cjk": "cjk", "palette": "palette"}[check]
 
 
 if __name__ == "__main__":

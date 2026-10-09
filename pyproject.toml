@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "archviz-3d"
-version = "0.7.1"
+version = "0.7.2"
 description = "Three.js self-contained 3D visualization engine for AI agents"
 readme = "README.md"
 license = {text = "MIT"}

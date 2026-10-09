@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.7.2 (2026-10-09)
+
+### Fixed
+
+- **`references/3d/boundary-declaration.md` 谁也到不了 —— 而它装着真内容。** 2,505 字节：
+  自包含 HTML vs 完整 App 的切换阈值表、`ArchVizBuild` contract、`dispose()` 要求、
+  工程卫生常量、动画规范、已验证 CDN 路径。全仓唯一提到它的是 `CHANGELOG.md` 的一行。
+  **`coverage` 上次没看见它，是因为 glob 写的是 `references/*.md`（非递归）**，而它躺在
+  `references/3d/` 子目录里 —— 闸门当时报「5 个文件全部可从 SKILL.md 到达」，目录里
+  实际有 6 个。现已把 glob 改成 `references/**/*.md`，并在 `## Skill Boundaries` 与
+  `## Architecture` 树里各加一处指向它。
+- **`## Architecture` 树第二次出错，这次是漏项。** 上次修的是「列了三个不存在的文件」，
+  这次是「存在的文件没列全」——`references/` 下只列了 4 个，实际有 5 个（加
+  `design-judgment.md` 共 6 个）。两次同型：树是手写的，没有闸门盯它。
+- `boundary-declaration.md` 里 `## ArchVizBuild Contract` / `### 工程卫生常量` /
+  `## CDN 路径` 三节与 SKILL.md 同名小节重复，已加显式说明「以 SKILL.md 为准」，避免
+  这个副本悄悄变成过期的那一份。
+
+### Added
+
+- **套件第 8 项检查 `pycompile`**：递归扫全仓 `.py`，用内建 `compile()`，不写
+  `__pycache__`（此前的 `compileall -q scripts archviz3d` 会写，且只覆盖两个目录）。
+- **`deps` 增加反方向核对**：声明了但没有任何代码 import 的依赖会失败，豁免必须写进
+  `deps.unused_exempt` 并说明理由。
+- `archviz-checks.json` 新增 `pycompile` 段；`coverage` 与 `cjk.scan` 的 glob 改为递归。
+
+### Changed
+
+- 套件 `KIT_VERSION` 1 → 2。CI 与 pre-commit 的 `compileall` 步骤移除（由套件接管）；
+  注释里写死的检查条数（「five checks」）删掉，改成指向
+  `python3 scripts/check_archviz.py --list`。
+
 ## v0.7.1 (2026-10-09)
 
 ### Fixed
