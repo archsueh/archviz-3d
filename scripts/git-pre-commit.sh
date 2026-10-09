@@ -26,6 +26,11 @@ python3 "$ROOT/scripts/check_archviz.py"
 echo "Checking consistency kit's own checker..."
 python3 "$ROOT/scripts/check_archviz.py" --self-test >/dev/null
 
+# Note the limit: byte-compilation never *imports*, so it cannot see a missing
+# dependency — that is the kit's `deps` check's job, not this one's.
+echo "Byte-compiling..."
+python3 -m compileall -q "$ROOT/scripts" "$ROOT/archviz3d"
+
 # Order is load-bearing and must match .github/workflows/ci.yml:
 #   sync modules -> stage
 # Both sync scripts exit non-zero if a template is missing its anchor, which

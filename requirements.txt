@@ -1,0 +1,12 @@
+# Python dependencies for the archviz-3d scripts.
+#   pip install -r requirements.txt
+#
+# Note: the installable package (archviz3d/) has no runtime dependencies — its
+# pyproject `dependencies = []` is deliberate. These are for the standalone
+# scripts only.
+#
+# The consistency kit (scripts/check_archviz.py) is stdlib-only on purpose and
+# needs none of these — it has to be able to guard this repo from a bare Python.
+
+# scripts/render_3d_explosion.py — compose exploded-view frames.
+Pillow>=10.0.0

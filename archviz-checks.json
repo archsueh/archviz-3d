@@ -35,6 +35,22 @@
     }
   ],
 
+  "coverage": [
+    {
+      "id": "reference_index",
+      "indexed_in": "SKILL.md",
+      "globs": ["references/*.md"]
+    }
+  ],
+
+  "deps": {
+    "requirements": "requirements.txt",
+    "pyproject": "pyproject.toml",
+    "python_roots": ["scripts", "archviz3d"],
+    "self_packages": ["archviz3d"],
+    "map": { "PIL": "Pillow" }
+  },
+
   "cjk": {
     "scan": [
       "SKILL.md",

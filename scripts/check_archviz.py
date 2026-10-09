@@ -52,6 +52,7 @@ a gate.
 from __future__ import annotations
 
 import argparse
+import ast
 import fnmatch
 import hashlib
 import json
@@ -139,8 +140,6 @@ def code_semver_literals(src: str) -> list[tuple[int, str]]:
     hardcode 0.2.5 here" note belongs. Only real string constants that are not
     docstrings count.
     """
-    import ast
-
     tree = ast.parse(src)
     docstrings: set[int] = set()
     doc_owners = (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
@@ -499,6 +498,241 @@ def compute_truth(root: Path, cfg: dict, truth: dict) -> int:
     raise ValueError(f"unknown truth kind: {kind!r}")
 
 
+def _naming_scan(root: Path, globs: list[str]) -> list[Path]:
+    """Text files a reference could plausibly be named by: every markdown file
+    in the repo, plus the index file. Kept to `*.md` on purpose — a reference
+    doc that is only reachable from a script is not reachable by an agent
+    reading the skill."""
+    found = [p for p in root.rglob("*.md") if p.is_file()]
+    for pattern in globs:
+        found += [p for p in root.glob(pattern) if p.is_file()]
+    return sorted(set(found))
+
+
+def check_coverage(root: Path, cfg: dict) -> Result:
+    """Every file matched by a glob must be **reachable** from the index file.
+
+    Reachability is transitive, not direct. This family chains: SKILL.md names
+    a handful of entry points, and those name others. Requiring SKILL.md to name
+    all 49 of archviz-diagram's reference files would be wrong — 13 of them are
+    legitimately reached through a chain, and forcing them all into the index
+    would break that repo's 44,000-byte budget. What matters is that a path
+    exists from the entry point, because under progressive disclosure a file
+    with no path is never loaded by anyone.
+
+    `counts` cannot see this failure. Delete one row from an index and the
+    declared count is still correct and the file count is still correct, so both
+    stay green while the file goes dark. Measured: that exact deletion passed
+    `counts` cleanly.
+
+    Measured on the family (2026-10-09) — the check's first real outing:
+    archviz-3d had **4/4** reference files unreachable and archviz-sketch **2/2**
+    (a whole `references/` directory nothing pointed at), archviz-diagram 1/49
+    (`3d-cleanup-log.md`), archviz-animated and archviz-layout 0.
+    """
+    r = Result("coverage")
+    specs = cfg.get("coverage") or []
+    if not specs:
+        r.skip("config 未声明 coverage 段")
+        return r
+
+    for spec in specs:
+        cid = spec.get("id", "?")
+        index_file = spec.get("indexed_in") or cfg.get("skill_md", "SKILL.md")
+        if not (root / index_file).exists():
+            r.fail(f"[{cid}] 索引文件不存在: {index_file}")
+            continue
+
+        exempt = spec.get("exempt", {})
+        for rel, why in exempt.items():
+            if not str(why).strip():
+                r.fail(f"[{cid}] exempt 里 {rel} 没有写明理由 —— 豁免必须留下原因，否则它就是隐藏")
+
+        targets: list[Path] = []
+        for pattern in spec.get("globs", []):
+            targets += [p for p in root.glob(pattern) if p.is_file()]
+        targets = sorted(set(targets))
+        if not targets:
+            r.fail(
+                f"[{cid}] glob 没匹配到任何文件 —— 配置写错了？（{spec.get('globs')}）"
+                " 一个恒真的覆盖检查比没有检查更糟"
+            )
+            continue
+
+        rel_of = {p: p.relative_to(root).as_posix() for p in targets}
+        pending = {rel for p, rel in rel_of.items() if rel not in exempt}
+
+        # Fixed point: keep absorbing files whose name appears in an already
+        # reached file, until nothing new is absorbed.
+        texts: dict[str, str] = {}
+
+        def text_of(rel: str) -> str:
+            if rel not in texts:
+                try:
+                    texts[rel] = read_text(root / rel)
+                except (OSError, UnicodeDecodeError):
+                    texts[rel] = ""
+            return texts[rel]
+
+        reached: set[str] = set()
+        scan = _naming_scan(root, spec.get("globs", []))
+        frontier = [index_file]
+        seen_frontier: set[str] = set()
+        while frontier:
+            nxt: list[str] = []
+            for rel in frontier:
+                if rel in seen_frontier:
+                    continue
+                seen_frontier.add(rel)
+                body = text_of(rel)
+                if not body:
+                    continue
+                for other in scan:
+                    orel = other.relative_to(root).as_posix()
+                    if orel in reached or orel == rel:
+                        continue
+                    # Deliberately a raw substring test, not `mentions()`: a
+                    # filename is not a word, so `\b` semantics do not apply, and
+                    # `normalise()` would eat the `-` / `_` inside the name —
+                    # turning `social-editorial-cards.md` into
+                    # `social editorial cards.md`, which never matches the
+                    # untouched index text.
+                    if orel in body or other.name in body:
+                        reached.add(orel)
+                        nxt.append(orel)
+            frontier = nxt
+
+        missing = sorted(pending - reached)
+        if missing:
+            r.fail(
+                f"[{cid}] {len(missing)}/{len(targets)} 个文件从 {index_file} **不可达** —— "
+                "没有任何文件点名它们，agent 永远不会加载，等于不存在: " + ", ".join(missing)
+            )
+        else:
+            tail = f"（{len(exempt)} 个豁免）" if exempt else ""
+            r.note(f"[{cid}] {len(targets)} 个文件全部可从 {index_file} 到达{tail}")
+
+    return r
+
+
+def _declared_distributions(root: Path, spec: dict) -> set[str]:
+    """Distribution names declared by requirements.txt and pyproject.toml."""
+    names: set[str] = set()
+
+    req = spec.get("requirements")
+    if req and (root / req).exists():
+        for line in read_text(root / req).splitlines():
+            line = line.split("#", 1)[0].strip()
+            if not line or line.startswith("-"):
+                continue
+            # Drop any version specifier / environment marker / extras.
+            name = re.split(r"[<>=!~;\[\s]", line, maxsplit=1)[0].strip()
+            if name:
+                names.add(name.lower())
+
+    pp = spec.get("pyproject")
+    if pp and (root / pp).exists():
+        # No tomllib before 3.11, and the kit targets 3.8+. A regex over the
+        # dependency arrays is enough: these are one-name-per-string lists.
+        text = read_text(root / pp)
+        for block in re.finditer(r"(?ms)(?:^\s*dependencies\s*=|^\s*\w+\s*=)\s*\[(.*?)\]", text):
+            for item in re.findall(r'"([^"]+)"|\'([^\']+)\'', block.group(1)):
+                raw = (item[0] or item[1]).strip()
+                if not raw:
+                    continue
+                name = re.split(r"[<>=!~;\[\s]", raw, maxsplit=1)[0].strip()
+                if name:
+                    names.add(name.lower())
+    return names
+
+
+def check_deps(root: Path, cfg: dict) -> Result:
+    """Every third-party import in the repo must be declared somewhere.
+
+    Same disease as the version written in four places: the set of imports is a
+    fact, and the set of declared dependencies is the same fact written down
+    again — so they drift silently. Measured across the family on 2026-10-09,
+    **all five repos had at least one undeclared import**: archviz-layout
+    (Pillow, playwright — no manifest at all), archviz-animated (matplotlib,
+    numpy, scipy), archviz-3d and archviz-sketch (Pillow), archviz-diagram
+    (PyYAML, pandas).
+
+    This is deliberately *not* implemented as `pip install -r … && compileall`.
+    Byte-compilation never imports anything, so that combination detects zero
+    missing dependencies; it only costs CI time and network. Reconciliation is
+    offline, deterministic, and names the exact module and file.
+    """
+    r = Result("deps")
+    spec = cfg.get("deps")
+    if not spec:
+        r.skip("config 未声明 deps 段")
+        return r
+
+    std = set(getattr(sys, "stdlib_module_names", ())) or set(sys.builtin_module_names)
+    self_pkgs = {s.lower() for s in spec.get("self_packages", [])}
+    module_map = {k.lower(): v.lower() for k, v in spec.get("map", {}).items()}
+
+    roots = spec.get("python_roots") or ["."]
+    files: list[Path] = []
+    for pattern in roots:
+        base = root / pattern
+        if base.is_file() and base.suffix == ".py":
+            files.append(base)
+        elif base.is_dir():
+            files += [p for p in base.rglob("*.py") if p.is_file()]
+    files = sorted(set(files))
+    if not files:
+        r.fail(f"deps.python_roots 没匹配到任何 .py —— 配置写错了？（{roots}）")
+        return r
+
+    imported: dict[str, set[str]] = {}
+    for p in files:
+        try:
+            tree = ast.parse(read_text(p))
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+        for n in ast.walk(tree):
+            mods: list[str] = []
+            if isinstance(n, ast.Import):
+                mods = [a.name for a in n.names]
+            elif isinstance(n, ast.ImportFrom) and n.level == 0 and n.module:
+                mods = [n.module]
+            for m in mods:
+                top = m.split(".")[0]
+                if top in std or top.lower() in self_pkgs or top.startswith("_"):
+                    continue
+                imported.setdefault(top, set()).add(p.relative_to(root).as_posix())
+
+    if not imported:
+        r.note(f"{len(files)} 个 .py，无第三方 import")
+        return r
+
+    declared = _declared_distributions(root, spec)
+    exempt = spec.get("exempt", {})
+    for mod, why in exempt.items():
+        if not str(why).strip():
+            r.fail(f"deps.exempt 里 {mod} 没有写明理由 —— 豁免必须留下原因，否则它就是隐藏")
+
+    undeclared: list[str] = []
+    for mod in sorted(imported):
+        if mod in exempt:
+            continue
+        if module_map.get(mod.lower(), mod.lower()) in declared:
+            continue
+        undeclared.append(f"{mod}（{', '.join(sorted(imported[mod]))}）")
+
+    if undeclared:
+        r.fail(
+            f"{len(undeclared)}/{len(imported)} 个第三方 import 未在任何清单里声明 —— "
+            "干净检出会直接 ImportError: " + "; ".join(undeclared)
+        )
+    else:
+        tail = f"（{len(exempt)} 个豁免）" if exempt else ""
+        r.note(f"{len(files)} 个 .py 的 {len(imported)} 个第三方 import 全部已声明{tail}")
+
+    return r
+
+
 def check_cjk(root: Path, cfg: dict) -> Result:
     r = Result("cjk")
     spec = cfg.get("cjk")
@@ -614,12 +848,20 @@ CHECKS = {
     "budget": check_budget,
     "routing": check_routing,
     "counts": check_counts,
+    "coverage": check_coverage,
+    "deps": check_deps,
     "cjk": check_cjk,
     "palette": check_palette,
 }
 
 
 # ─────────────────────────── 自测 ───────────────────────────
+
+COVERAGE_SPEC = {
+    "id": "refs",
+    "indexed_in": "SKILL.md",
+    "globs": ["references/*.md"],
+}
 
 FIXTURE_CONFIG = {
     "skill_md": "SKILL.md",
@@ -644,7 +886,17 @@ FIXTURE_CONFIG = {
         }
     ],
     "cjk": {"scan": ["*.html"], "require_charset": ["*.html"]},
+    "coverage": [COVERAGE_SPEC],
+    "deps": {
+        "requirements": "requirements.txt",
+        "pyproject": "pyproject.toml",
+        "python_roots": ["."],
+        "self_packages": ["demo_pkg"],
+        "map": {"PIL": "Pillow"},
+    },
 }
+
+GOOD_REQUIREMENTS = "# demo\nrequests>=2.0\nPillow>=10.0\n"
 
 GOOD_SKILL = """---
 name: demo
@@ -655,12 +907,18 @@ metadata:
 
 # Demo
 - **2 styles**: line, watercolor
+
+## References
+2 files: `references/alpha.md`, `references/beta.md`
 """
 GOOD_ENGINE = 'STYLES = {\n    "line": {\n        "a": 1,\n    },\n    "watercolor": {\n        "a": 2,\n    },\n}\n'
 GOOD_CHANGELOG = "# Changelog\n\n## 1.2.3 (2026-01-01)\n"
 GOOD_PYPROJECT = '[project]\nname = "demo"\nversion = "1.2.3"\n'
 GOOD_PUB = 'import re\nversion = None  # read at runtime\n'
 GOOD_HTML = '<!DOCTYPE html>\n<html><head><meta charset="utf-8"></head><body>水彩</body></html>\n'
+GOOD_REF = "# Reference\n\nBody.\n"
+GOOD_REF_ORPHAN = "# Orphan\n\nNever named by SKILL.md.\n"
+GOOD_USES_REQUESTS = "import os\nimport requests\n"
 
 
 def write_fixture(tmp: Path, **overrides: str) -> None:
@@ -672,10 +930,16 @@ def write_fixture(tmp: Path, **overrides: str) -> None:
         "pub.py": GOOD_PUB,
         "a.html": GOOD_HTML,
         ".gitattributes": "SKILL.md text eol=lf\n",
+        "references/alpha.md": GOOD_REF,
+        "references/beta.md": GOOD_REF,
+        "requirements.txt": GOOD_REQUIREMENTS,
+        "uses_requests.py": GOOD_USES_REQUESTS,
     }
     base.update(overrides)
     for name, content in base.items():
-        (tmp / name).write_text(content, encoding="utf-8")
+        path = tmp / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
 
 
 def run_check(tmp: Path, name: str, cfg: dict) -> bool:
@@ -715,16 +979,51 @@ def self_test() -> int:
         ("cjk_no_charset", "cjk", {"a.html": "<html><body>水彩</body></html>\n"}, {}, False),
         ("cjk_charset_exempt_with_reason", "cjk",
          {"a.html": "<html><body>水彩</body></html>\n"},
-         {"charset_exempt": {"a.html": "paste-in fragment"}}, True),
+         {"cjk.charset_exempt": {"a.html": "paste-in fragment"}}, True),
         ("cjk_charset_exempt_without_reason", "cjk",
          {"a.html": "<html><body>水彩</body></html>\n"},
-         {"charset_exempt": {"a.html": "   "}}, False),
+         {"cjk.charset_exempt": {"a.html": "   "}}, False),
         ("cjk_replacement_char", "cjk", {"a.html": '<meta charset="utf-8">\ufffd水彩\n'}, {}, False),
         ("cjk_mojibake_marker", "cjk",
          {"a.html": '<meta charset="utf-8">\nâ€œ水彩â€\n'}, {}, False),
         ("cjk_whole_file_wrong_encoding", "cjk",
          {"a.html": '<meta charset="utf-8">\n' + "水彩测试中文".encode("utf-8").decode("latin-1") + "\n"},
          {}, False),
+        # coverage: the failure `counts` structurally cannot see. Deleting an
+        # index row leaves the declared count and the file count both correct.
+        ("coverage_ok", "coverage", {}, {}, True),
+        ("coverage_unindexed_file", "coverage",
+         {"references/gamma.md": GOOD_REF_ORPHAN}, {}, False),
+        ("coverage_index_row_deleted", "coverage",
+         {"SKILL.md": GOOD_SKILL.replace(", `references/beta.md`", "")}, {}, False),
+        # Anti-polarity: a file named only by *another* reference file is
+        # legitimately reachable. Without this case the transitive walk could be
+        # replaced by a direct-naming check and the suite would not notice —
+        # which is exactly the mistake the family's chained convention punishes.
+        ("coverage_reachable_via_chain", "coverage",
+         {"SKILL.md": GOOD_SKILL.replace(", `references/beta.md`", ""),
+          "references/alpha.md": GOOD_REF + "\nSee `references/beta.md`.\n"}, {}, True),
+        ("coverage_exempt_with_reason", "coverage",
+         {"references/gamma.md": GOOD_REF_ORPHAN},
+         {"coverage": [{**COVERAGE_SPEC, "exempt": {"references/gamma.md": "WIP, indexed next release"}}]},
+         True),
+        ("coverage_exempt_without_reason", "coverage",
+         {"references/gamma.md": GOOD_REF_ORPHAN},
+         {"coverage": [{**COVERAGE_SPEC, "exempt": {"references/gamma.md": "  "}}]},
+         False),
+        ("coverage_glob_matches_nothing", "coverage", {},
+         {"coverage": [{**COVERAGE_SPEC, "globs": ["nowhere/*.md"]}]}, False),
+        # deps: reconcile imports against manifests.
+        ("deps_ok", "deps", {}, {}, True),
+        ("deps_undeclared_import", "deps", {"uses_requests.py": "import boto3\n"}, {}, False),
+        ("deps_module_to_dist_name", "deps", {"uses_requests.py": "from PIL import Image\n"}, {}, True),
+        ("deps_stdlib_is_not_a_dependency", "deps", {"uses_requests.py": "import os\nimport json\n"}, {}, True),
+        ("deps_local_package_is_not_a_dependency", "deps",
+         {"uses_requests.py": "import demo_pkg\n"}, {}, True),
+        ("deps_exempt_with_reason", "deps", {"uses_requests.py": "import boto3\n"},
+         {"deps.exempt": {"boto3": "optional S3 export, documented in README"}}, True),
+        ("deps_exempt_without_reason", "deps", {"uses_requests.py": "import boto3\n"},
+         {"deps.exempt": {"boto3": " "}}, False),
     ]
 
     failures = 0
@@ -734,7 +1033,14 @@ def self_test() -> int:
             write_fixture(tmp, **overrides)
             cfg = copy.deepcopy(FIXTURE_CONFIG)
             for key, value in patch.items():
-                cfg.setdefault("cjk", {})[key] = value
+                # `cjk.foo` patches inside the cjk section; a bare key replaces a
+                # top-level section. The old code hardcoded `cjk`, which silently
+                # made every non-cjk patch land in the wrong place.
+                if "." in key:
+                    section, field = key.split(".", 1)
+                    cfg.setdefault(section, {})[field] = value
+                else:
+                    cfg[key] = value
             try:
                 got = run_check(tmp, check, cfg)
             except Exception as e:  # a crash is a failed case, not a crashed suite
@@ -832,7 +1138,8 @@ def main(argv: list[str]) -> int:
 
 def _config_key(check: str) -> str:
     return {"version": "version", "budget": "skill_md_max_bytes", "routing": "routing",
-            "counts": "counts", "cjk": "cjk", "palette": "palette"}[check]
+            "counts": "counts", "coverage": "coverage", "deps": "deps",
+            "cjk": "cjk", "palette": "palette"}[check]
 
 
 if __name__ == "__main__":

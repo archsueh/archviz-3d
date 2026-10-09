@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.7.1 (2026-10-09)
+
+### Fixed
+
+- **`references/` 索引是错的，而且两个方向都错。** SKILL.md 的 `## Architecture`
+  目录树里写着 `└── (Phase 3: kinematics-formulas.md, performance-hygiene.md,
+  mechlab-contract.md)` —— **这三个文件一个都不存在**；而目录里实际有的四个文件
+  （`3d-models-sources.md` / `gotchas.md` / `mechlab-analysis.md` /
+  `threejs-gotchas.md`）**一个都没列**。现在树里列全四个，并标出哪两个是维护者
+  文件（非 agent 面）。这是套件新增的 `coverage` 检查第一次派上用场的现场。
+- **`scripts/` 有未声明的第三方依赖。** `render_3d_explosion.py` 顶层 `import PIL`，
+  而仓库既无 `requirements.txt`，pyproject 的 `dependencies = []` 又是刻意的
+  （包本身零依赖）。现由 `requirements.txt` 声明 Pillow，并由套件的 `deps`
+  检查守住不再复发。同一缺陷在**家族五个仓库里全部存在**。
+
+### Added
+
+- **`requirements.txt`** —— `Pillow`。此前干净检出直接 `ImportError`。
+- **`coverage` 检查** —— 套件新增：`references/*.md` 必须从 SKILL.md **可达**。
+  索引里漏一个文件，任何计数都还是对的 —— 这个失效模式 `counts` 结构上看不见。
+- **`deps` 检查** —— 套件新增：把仓库里每个第三方 import 与清单对账。
+
+### Changed
+
+- **`design-judgment` 集成块移出 SKILL.md 正文。** 2026-10-09 20:32:55 有并行会话
+  在五个 archviz 仓库的 SKILL.md 末尾各追加了一段 956 字节的
+  `<!-- design-judgment-integration -->` 块（交付前跑五段判断链自检）。
+  **内容逐字保留，未删改一字**，但 956 字节会把本仓顶到 23,205 / 23,000 —— 超限。
+  现移入 `references/design-judgment.md`，正文只留一行指针，SKILL.md 回到
+  22,615 字节。`references/` 目录树里同步列出该文件。
+
 ## v0.7.0 (2026-10-09)
 
 This repo had **no CI at all** before this release, and the version was written

@@ -34,8 +34,9 @@ jobs:
         git diff --exit-code || (echo "ERROR: Templates are out of sync with components. Run scripts/git-pre-commit.sh locally and commit the result!" && exit 1)
 
     # One portable kit, one per-repo config — see archviz-diagram's ADR-003.
-    # Five checks: version / SKILL.md byte budget / description routing surface
-    # / count claims / CJK encoding. This repo had no CI at all before this.
+    # Seven checks: version / SKILL.md byte budget / description routing surface
+    # / count claims / reference reachability / undeclared imports / CJK
+    # encoding. This repo had no CI at all before this.
     - name: Verify Consistency Kit
       run: python3 scripts/check_archviz.py
 
@@ -44,3 +45,19 @@ jobs:
     # the cases that must NOT fire.
     - name: Verify Consistency Kit Checker
       run: python3 scripts/check_archviz.py --self-test
+
+    # Verifies the manifest is installable, not just present. The `deps` check
+    # inside the kit already fails on an undeclared import; this step catches
+    # what it structurally cannot — a declared name that does not resolve, or a
+    # specifier no release satisfies.
+    - name: Install declared dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    # Nothing else in this workflow executes the Python. Compiling catches a
+    # syntax error that would otherwise only surface when someone runs a script
+    # by hand. Note the limit: byte-compilation never *imports*, so it cannot
+    # see a missing dependency — that is `deps`' job, not this one's.
+    - name: Byte-compile
+      run: python3 -m compileall -q scripts archviz3d

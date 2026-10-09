@@ -8,7 +8,7 @@ description: |
   超出自包含复杂度时引导切 Vite + R3F。
 license: MIT
 metadata:
-  version: 0.7.0
+  version: 0.7.1
   source: https://github.com/archsueh/archviz-3d
   risk: safe
   author: archsueh
@@ -382,7 +382,10 @@ archviz-3d/
 │       ├── index.html
 │       └── assets/sofa.glb
 └── references/
-    └── (Phase 3: kinematics-formulas.md, performance-hygiene.md, mechlab-contract.md)
+    ├── 3d-models-sources.md   # 免费 CC0 3D 模型 / HDRI / 贴图来源清单
+    ├── gotchas.md             # 3D 空间 gotchas —— 每次真实任务后追加
+    ├── mechlab-analysis.md    # （维护者）mechlab 参考分析，非 agent 面
+    └── threejs-gotchas.md     # （维护者）重定向占位，内容已并入本文件 § Key Gotchas
 ```
 
 **Tier A output:** single `.html` file (self-contained)
@@ -599,3 +602,9 @@ python3 scripts/render_3d_explosion.py \
 - 3D 深度模拟
 
 ---
+
+<!-- design-judgment-integration -->
+## 交付前自检 (Post-Generation Design Judgment)
+
+交付前必须跑 `design-judgment` 技能的五段判断链做自检，不要只交付「技术上成功的第一稿」——
+完整规则（五段链 / 六维度 / 选模型路由 / 三条硬边界）见 [`references/design-judgment.md`](references/design-judgment.md)。
