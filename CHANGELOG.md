@@ -1,5 +1,50 @@
 # Changelog
 
+## v0.7.0 (2026-10-09)
+
+This repo had **no CI at all** before this release, and the version was written
+down in two places that disagreed. Both are now gated.
+
+### Fixed
+
+- **`pyproject.toml` was 0.2.0 while SKILL.md and CHANGELOG said 0.6.2 — four
+  minor releases of drift, with nothing able to notice.** `pip install -e .`
+  would have installed a package whose metadata reported 0.2.0 while the skill
+  shipped as 0.6.2. SKILL.md `metadata.version` is the release truth; everything
+  else is now checked against it.
+- **`description` now states the type count explicitly** (`2 类型：building…、
+  floorplan…`). Both names were already routed, but the count was written
+  nowhere, so there was nothing for a count gate to hold. The description is the
+  one text an agent reads *before* deciding to load the skill, which makes it the
+  right place for both the routing surface and the count.
+
+### Added
+
+- **`scripts/check_archviz.py`** — the family's portable consistency kit
+  (archviz-diagram ADR-003). One file, per-repo `archviz-checks.json`, stdlib
+  only, no venv and no package import required. Five checks: `version` /
+  `budget` / `routing` / `counts` / `cjk`. `--self-test` carries 23 adversarial
+  fixtures, four of which must **not** fire.
+- **`.github/workflows/ci.yml`** — first CI for this repo. Runs the sync scripts,
+  requires zero diff (a committed template that no longer matches its source is
+  silent drift), then runs the kit and the kit's own checker.
+- **`scripts/git-pre-commit.sh`** — same gates locally, before the sync block.
+- **`.gitattributes`** — pins SKILL.md to LF. The byte cap counts LF-normalised
+  bytes so a checkout with `core.autocrlf=true` measures the committed size.
+- **`archviz-checks.json`** — registry: 2 types from `archviz3d/engine.py`.
+
+### Verified
+
+- `scripts/check_archviz.py` → PASS (5/5)
+- `scripts/check_archviz.py --self-test` → 23/23
+- Sync scripts produce zero diff on a clean tree, so the CI sync-drift step is
+  satisfiable rather than permanently red.
+- `cjk` flagged 4 templates without a charset declaration; all four are
+  `_`-prefixed paste-in fragments with no `<head>` of their own. Registered as
+  exemptions **with a stated reason each** — the kit fails an exemption that
+  carries no reason, and `_archviz-export.html` (also a fragment, but it does
+  declare a charset) was deliberately left out.
+
 ## v0.6.2 (2026-09-30)
 
 Re-synced the shared partials to archviz-diagram and gave this repo the same

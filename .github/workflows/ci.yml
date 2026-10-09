@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate:
+    name: Verify Sync and Consistency
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    # Order mirrors scripts/git-pre-commit.sh: sync modules -> require zero
+    # diff -> run the gates. The sync scripts paste shared partials into every
+    # template, so a committed template that no longer matches its source is
+    # exactly the silent drift this job exists to catch.
+    - name: Run Sync Scripts
+      run: |
+        python scripts/sync_theme.py
+        python scripts/sync_export.py
+
+    - name: Check for Uncommitted Sync Changes
+      run: |
+        git diff --exit-code || (echo "ERROR: Templates are out of sync with components. Run scripts/git-pre-commit.sh locally and commit the result!" && exit 1)
+
+    # One portable kit, one per-repo config — see archviz-diagram's ADR-003.
+    # Five checks: version / SKILL.md byte budget / description routing surface
+    # / count claims / CJK encoding. This repo had no CI at all before this.
+    - name: Verify Consistency Kit
+      run: python3 scripts/check_archviz.py
+
+    # A checker is only a gate if its own failure modes are tested. Runs the
+    # adversarial fixtures: every check exercised in both polarities, including
+    # the cases that must NOT fire.
+    - name: Verify Consistency Kit Checker
+      run: python3 scripts/check_archviz.py --self-test

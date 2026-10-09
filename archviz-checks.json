@@ -1,0 +1,54 @@
+{
+  "kit": 1,
+  "skill_md": "SKILL.md",
+  "skill_md_max_bytes": 23000,
+  "require_lf_pin": true,
+
+  "version": {
+    "changelog": "CHANGELOG.md",
+    "pyproject": "pyproject.toml"
+  },
+
+  "registries": {
+    "types": {
+      "kind": "source_regex",
+      "file": "archviz3d/engine.py",
+      "block": "^TYPE_REGISTRY = \\{(.*?)^\\}",
+      "block_flags": "MS",
+      "entry": "^\\s{4}\"([\\w-]+)\":\\s*\\{",
+      "flags": "M"
+    }
+  },
+
+  "routing": {
+    "registries": ["types"],
+    "also_check_triggers": false
+  },
+
+  "counts": [
+    {
+      "id": "types",
+      "truth": { "kind": "registry_len", "registry": "types" },
+      "assertions": [
+        { "file": "SKILL.md", "regex": "(\\d+)\\s*类型：" }
+      ]
+    }
+  ],
+
+  "cjk": {
+    "scan": [
+      "SKILL.md",
+      "README.md",
+      "CHANGELOG.md",
+      "references/*.md",
+      "templates/html/*.html"
+    ],
+    "require_charset": ["templates/html/*.html"],
+    "charset_exempt": {
+      "templates/html/_archviz-theme.html": "paste-in fragment — consumed inside another document's <head>, declares no charset of its own",
+      "templates/html/_archviz-3d-contract.html": "paste-in fragment — contract block, not a standalone document",
+      "templates/html/_archviz-deps.html": "paste-in fragment — dependency block, not a standalone document",
+      "templates/html/_archviz-svg-overlay.html": "paste-in fragment — svg overlay block, not a standalone document"
+    }
+  }
+}

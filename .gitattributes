@@ -1,0 +1,7 @@
+# Normalise line endings on checkout. `scripts/check_archviz.py` counts SKILL.md
+# in LF bytes so the byte cap measures the committed size rather than whatever
+# the developer's `core.autocrlf` produced. Removing this pin loosens nothing:
+# the gate fails when the pin is gone.
+* text=auto eol=lf
+
+SKILL.md text eol=lf

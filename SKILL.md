@@ -2,13 +2,13 @@
 name: archviz-3d
 description: |
   当用户需要建筑结构、楼层功能、机械爆炸图、空间剖面或交互式 3D 教学可视化（明确提到 3D/building/floorplan/structure/exploded/spatial/walkthrough/mechanical）时加载。
-  自包含 HTML（Three.js + animejs v4 CDN），零构建。
+  2 类型：building（多层建筑结构，可选爆炸视图 / 线框）、floorplan（房间布局 + 导航）。自包含 HTML（Three.js + animejs v4 CDN），零构建。
   2D 流程图/信息可视化 → archviz-diagram。
   手绘/草图配图 → archviz-sketch。
   超出自包含复杂度时引导切 Vite + R3F。
 license: MIT
 metadata:
-  version: 0.6.2
+  version: 0.7.0
   source: https://github.com/archsueh/archviz-3d
   risk: safe
   author: archsueh
