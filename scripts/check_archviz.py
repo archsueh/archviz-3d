@@ -71,7 +71,7 @@ import re
 import sys
 from pathlib import Path
 
-KIT_VERSION = 2
+KIT_VERSION = 3
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_NAME = "archviz-checks.json"
@@ -633,6 +633,67 @@ def check_coverage(root: Path, cfg: dict) -> Result:
     return r
 
 
+def _stdlib_modules() -> set[str]:
+    """Module names that are part of the standard library, as a set.
+
+    `sys.stdlib_module_names` is authoritative but only exists on Python 3.10+.
+    The kit advertises 3.8+ support, so on 3.9 and older the attribute is
+    absent and the previous fallback — `sys.builtin_module_names` — lists only
+    the *compiled-in* modules (`sys`, `builtins`, `_io`, …). Every pure-Python
+    stdlib module (`os`, `json`, `re`, `pathlib`, …) then looks third-party, so
+    `deps` reported `os`/`json` as undeclared imports and every deps self-test
+    case failed. Measured 2026-10-09 on `/usr/bin/python3` (3.9.6): 12/55
+    self-test cases MISMATCH, all of them `deps`.
+
+    Fallback: walk the stdlib directories **and their `lib-dynload` subdirs**
+    (where the compiled extension modules — `math`, `zlib`, `_ssl`, … — live,
+    and which the first attempt missed), collecting top-level `.py`/package
+    names. `site-packages`/`dist-packages` are never treated as stdlib: those
+    are exactly the third-party distributions this check exists to see.
+    `stdlib_module_names` is always preferred when present.
+    """
+    names = getattr(sys, "stdlib_module_names", None)
+    if names:
+        return set(names) | set(sys.builtin_module_names)
+
+    import sysconfig
+
+    out = set(sys.builtin_module_names)
+    site_markers = {"site-packages", "dist-packages"}
+    paths = sysconfig.get_paths()
+    roots = [paths.get("stdlib"), paths.get("platstdlib")]
+    for root_str in roots:
+        if not root_str:
+            continue
+        root = Path(root_str)
+        # The stdlib root, plus every `lib-dynload` directory beneath it
+        # (compiled extensions: math, zlib, _ssl, …).
+        dirs = [root]
+        dirs += [d for d in root.rglob("lib-dynload") if d.is_dir()]
+        for d in dirs:
+            if not d.is_dir():
+                continue
+            try:
+                entries = list(d.iterdir())
+            except OSError:
+                continue
+            for entry in entries:
+                if entry.name in site_markers or entry.name.startswith("site-packages"):
+                    continue
+                if entry.is_dir():
+                    # A stdlib package has an `__init__.py`. Bare dirs
+                    # (`site-packages`, `lib-dynload`) are not modules.
+                    if (entry / "__init__.py").exists():
+                        out.add(entry.name)
+                elif entry.suffix in (".py", ".pyc", ".so") and not entry.name.startswith("_"):
+                    # An extension module is `math.cpython-39-darwin.so`; the
+                    # importable name is the part before the first dot, not
+                    # `Path.stem` (which only drops `.so` and would yield
+                    # `math.cpython-39-darwin`).
+                    out.add(entry.name.split(".", 1)[0])
+    return out
+
+
 def _dist_names_in_array(body: str) -> set[str]:
     """Distribution names inside a TOML array literal, version specifiers dropped."""
     out: set[str] = set()
@@ -738,7 +799,7 @@ def check_deps(root: Path, cfg: dict) -> Result:
         r.skip("config 未声明 deps 段")
         return r
 
-    std = set(getattr(sys, "stdlib_module_names", ())) or set(sys.builtin_module_names)
+    std = _stdlib_modules()
     self_pkgs = {s.lower() for s in spec.get("self_packages", [])}
     module_map = {k.lower(): v.lower() for k, v in spec.get("map", {}).items()}
 
