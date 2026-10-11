@@ -34,9 +34,11 @@ jobs:
         git diff --exit-code || (echo "ERROR: Templates are out of sync with components. Run scripts/git-pre-commit.sh locally and commit the result!" && exit 1)
 
     # One portable kit, one per-repo config — see archviz-diagram's ADR-003.
-    # Seven checks: version / SKILL.md byte budget / description routing surface
-    # / count claims / reference reachability / undeclared imports / CJK
-    # encoding. This repo had no CI at all before this.
+    # The check count is NOT written here on purpose — run
+    # `python3 scripts/check_archviz.py --list` for the truth. This comment
+    # said "Seven checks" while the kit ran eight (pycompile was added in
+    # KIT_VERSION 2 and this line was not updated); the family's own
+    # "don't hardcode a count" rule applies to its CI comments too.
     - name: Verify Consistency Kit
       run: python3 scripts/check_archviz.py
 
