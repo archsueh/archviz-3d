@@ -20,14 +20,33 @@ jobs:
       with:
         python-version: '3.12'
 
-    # Order mirrors scripts/git-pre-commit.sh: sync modules -> require zero
-    # diff -> run the gates. The sync scripts paste shared partials into every
-    # template, so a committed template that no longer matches its source is
-    # exactly the silent drift this job exists to catch.
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    # Step order is load-bearing and mirrors scripts/git-pre-commit.sh:
+    #   check formatting -> sync modules -> reformat -> require zero diff
+    #
+    # Prettier re-indents the embedded <style>/<script> blocks that the sync
+    # scripts paste in, so `sync` alone can never reproduce a committed
+    # template. Measured 2026-10-11: this repo's CI ran `sync -> git diff`
+    # without the prettier steps, so it failed on every push — the sync scripts
+    # re-emit unformatted blocks that no longer match the prettier-formatted
+    # committed files. Do not reorder these steps.
+    #
+    # Prettier is pinned so a new release cannot silently change the expected
+    # formatting. Bump it here and in scripts/git-pre-commit.sh together.
+    - name: Verify Code Formatting with Prettier
+      run: npx --yes prettier@3.9.9 --check "templates/html/*.html"
+
     - name: Run Sync Scripts
       run: |
         python scripts/sync_theme.py
         python scripts/sync_export.py
+
+    - name: Format Synced Templates with Prettier
+      run: npx --yes prettier@3.9.9 --write "templates/html/*.html"
 
     - name: Check for Uncommitted Sync Changes
       run: |
