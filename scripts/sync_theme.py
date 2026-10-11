@@ -17,16 +17,8 @@ import sys
 from pathlib import Path
 
 # Partial templates that are not meant to carry the theme block.
-EXCLUDED = {
-    "_archviz-theme.html",
-    "_archviz-export.html",
-    "_archviz-animated.html",
-    "_flow-attach.html",
-    # archviz-3d 自有的 paste-in 模块：它们是片段，不该带主题锚点
-    "_archviz-3d-contract.html",
-    "_archviz-deps.html",
-    "_archviz-svg-overlay.html",
-}
+# The shared skip set lives in one place — see sync_common.py for why.
+from sync_common import EXCLUDED
 
 # Templates that deliberately do not carry the shared theme block, with the
 # reason. Currently empty — every full-page template reads --av-* tokens, so

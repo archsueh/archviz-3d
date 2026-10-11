@@ -71,7 +71,7 @@ import re
 import sys
 from pathlib import Path
 
-KIT_VERSION = 5
+KIT_VERSION = 6
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_NAME = "archviz-checks.json"
@@ -816,6 +816,20 @@ def check_deps(root: Path, cfg: dict) -> Result:
         r.fail(f"deps.python_roots 没匹配到任何 .py —— 配置写错了？（{roots}）")
         return r
 
+    # Local modules are not third-party dependencies. A `.py` file inside a
+    # `python_roots` directory that is imported by another file in the same
+    # tree is part of *this repo*, not a distribution to declare. Without this,
+    # `from sync_common import EXCLUDED` (a sibling script module) is reported
+    # as an undeclared third-party import — measured 2026-10-09 when the two
+    # sync scripts started sharing a constant. `self_packages` covers the
+    # installed package; this covers loose script modules next to each other.
+    local_mods: set[str] = set()
+    for p in files:
+        local_mods.add(p.stem.lower())
+        # A directory package (`foo/__init__.py`) is importable as `foo`.
+        if p.name == "__init__.py":
+            local_mods.add(p.parent.name.lower())
+
     imported: dict[str, set[str]] = {}
     for p in files:
         try:
@@ -830,7 +844,8 @@ def check_deps(root: Path, cfg: dict) -> Result:
                 mods = [n.module]
             for m in mods:
                 top = m.split(".")[0]
-                if top in std or top.lower() in self_pkgs or top.startswith("_"):
+                if (top in std or top.lower() in self_pkgs
+                        or top.lower() in local_mods or top.startswith("_")):
                     continue
                 imported.setdefault(top, set()).add(p.relative_to(root).as_posix())
 
@@ -1366,6 +1381,13 @@ def self_test() -> int:
          {"uses_requests.py": "import os\nimport json\nimport requests\n"}, {}, True),
         ("deps_local_package_is_not_a_dependency", "deps",
          {"uses_requests.py": "import requests\nimport demo_pkg\n"}, {}, True),
+        # A sibling script module imported by another script in the same
+        # python_roots tree is local, not a distribution. Measured 2026-10-09:
+        # the two sync scripts started sharing `sync_common`, and `deps`
+        # reported it as an undeclared third-party import.
+        ("deps_sibling_module_is_local", "deps",
+         {"uses_requests.py": "import requests\nimport helper\n",
+          "helper.py": "X = 1\n"}, {}, True),
         ("deps_exempt_with_reason", "deps", {"uses_requests.py": "import requests\nimport boto3\n"},
          {"deps.exempt": {"boto3": "optional S3 export, documented in README"}}, True),
         ("deps_exempt_without_reason", "deps", {"uses_requests.py": "import requests\nimport boto3\n"},
