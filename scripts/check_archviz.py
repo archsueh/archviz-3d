@@ -71,7 +71,7 @@ import re
 import sys
 from pathlib import Path
 
-KIT_VERSION = 3
+KIT_VERSION = 4
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_NAME = "archviz-checks.json"
@@ -1094,6 +1094,68 @@ def check_palette(root: Path, cfg: dict) -> Result:
     return r
 
 
+def check_prose(root: Path, cfg: dict) -> Result:
+    """No hardcoded check count in prose — the authority is `--list`.
+
+    This is the third recurrence of one disease, which is why it finally gets a
+    gate. The count of checks the kit runs has been written into prose three
+    times and drifted every time:
+
+      1. gotchas §2026-09-30 — palette count "11" written as "4".
+      2. ADR-003 — sketch's SKILL.md said "8 套模板", truth was 7; already
+         fixed once in two other places, missed the third.
+      3. 2026-10-09 — four repos' `.github/workflows/ci.yml` said "Seven
+         checks" (and layout said "Five") while the kit ran eight; ADR-003 had
+         *already declared* the count belongs in `--list` and that the CI
+         comments were cleaned up, but only archviz-diagram's was.
+
+    A prose count is a second copy of a fact that already has a source of
+    truth, and it drifts the instant a check is added — exactly the disease
+    this whole kit exists to catch. The rule is therefore not "keep the number
+    accurate" but "do not state a number": point at `--list`. A line that
+    genuinely must quote a historical count (e.g. "this said Seven checks while
+    the kit ran eight") phrases it so the pattern does not fire — see the CI
+    comments for the wording — or carries an exemption with a reason.
+
+    `prose.exempt` maps `file:line` to a reason; an empty reason is a FAIL, same
+    as every other exemption in the kit.
+    """
+    r = Result("prose")
+    spec = cfg.get("prose")
+    if not spec:
+        r.skip("config 未声明 prose 段")
+        return r
+
+    pat = compile_re(spec["count_regex"], spec.get("flags", "I"))
+    exempt_raw = spec.get("exempt", {})
+    for key, why in exempt_raw.items():
+        if not str(why).strip():
+            r.fail(f"prose.exempt 里 {key} 没有写明理由 —— 豁免必须留下原因，否则它就是隐藏")
+    exempt = {k for k in exempt_raw}
+
+    scanned = 0
+    for rel in spec.get("files", []):
+        path = root / rel
+        if not path.exists():
+            continue  # file does not exist in this repo — not applicable
+        scanned += 1
+        text = read_text(path)
+        for m in pat.finditer(text):
+            ln = text[: m.start()].count("\n") + 1
+            key = f"{rel}:{ln}"
+            if key in exempt:
+                continue
+            r.fail(
+                f"{rel}:{ln} 写死了检查数量（{m.group(0).strip()!r}）—— "
+                "权威来源是 `python3 scripts/check_archviz.py --list`，"
+                "散文里的计数必然随新增检查漂移（本缺陷已复发三次）"
+            )
+
+    if not r.failures:
+        r.note(f"{scanned} 个文件无写死的检查数量（权威来源：--list）")
+    return r
+
+
 CHECKS = {
     "version": check_version,
     "budget": check_budget,
@@ -1104,6 +1166,7 @@ CHECKS = {
     "pycompile": check_pycompile,
     "cjk": check_cjk,
     "palette": check_palette,
+    "prose": check_prose,
 }
 
 
@@ -1113,6 +1176,11 @@ COVERAGE_SPEC = {
     "id": "refs",
     "indexed_in": "SKILL.md",
     "globs": ["references/*.md"],
+}
+
+PROSE_SPEC = {
+    "files": ["ci.yml"],
+    "count_regex": r"\b(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+checks?\b",
 }
 
 FIXTURE_CONFIG = {
@@ -1147,6 +1215,7 @@ FIXTURE_CONFIG = {
         "map": {"PIL": "Pillow"},
     },
     "pycompile": {"globs": ["**/*.py"], "skip_dirs": [".git", "node_modules", "__pycache__"]},
+    "prose": PROSE_SPEC,
 }
 
 GOOD_REQUIREMENTS = "# demo\nrequests>=2.0\nPillow>=10.0\n"
@@ -1352,6 +1421,25 @@ def self_test() -> int:
         ("pycompile_exempt_without_reason", "pycompile",
          {"examples/x.py": GOOD_MARKDOWN_AS_PY},
          {"pycompile.exempt": {"examples/x.py": "  "}}, False),
+        # prose: the third recurrence of the "hardcoded count" disease finally
+        # gets a gate. Both polarities plus the anti-polarity cases that prove
+        # the gate is narrow: a count in a file that does not exist, and a
+        # quoted historical count carrying an exemption.
+        ("prose_ok", "prose", {}, {}, True),
+        ("prose_hardcoded_count", "prose",
+         {"ci.yml": "# Seven checks: version / budget / CJK\n"}, {}, False),
+        ("prose_hardcoded_count_digits", "prose",
+         {"ci.yml": "# 8 checks run here\n"}, {}, False),
+        ("prose_absent_file_is_not_scanned", "prose",
+         {"ci.yml": "# Seven checks\n"},
+         {"prose": {**PROSE_SPEC, "files": ["nonexistent.yml"]}}, True),
+        ("prose_exempt_with_reason", "prose",
+         {"ci.yml": "# Seven checks\n"},
+         {"prose": {**PROSE_SPEC, "exempt": {"ci.yml:1": "quotes a historical count in a migration note"}}},
+         True),
+        ("prose_exempt_without_reason", "prose",
+         {"ci.yml": "# Seven checks\n"},
+         {"prose": {**PROSE_SPEC, "exempt": {"ci.yml:1": "   "}}}, False),
     ]
 
     failures = 0
@@ -1467,7 +1555,8 @@ def main(argv: list[str]) -> int:
 def _config_key(check: str) -> str:
     return {"version": "version", "budget": "skill_md_max_bytes", "routing": "routing",
             "counts": "counts", "coverage": "coverage", "deps": "deps",
-            "pycompile": "pycompile", "cjk": "cjk", "palette": "palette"}[check]
+            "pycompile": "pycompile", "cjk": "cjk", "palette": "palette",
+            "prose": "prose"}[check]
 
 
 if __name__ == "__main__":
