@@ -71,7 +71,7 @@ import re
 import sys
 from pathlib import Path
 
-KIT_VERSION = 4
+KIT_VERSION = 5
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_NAME = "archviz-checks.json"
@@ -1443,7 +1443,9 @@ def self_test() -> int:
     ]
 
     failures = 0
+    total = 0
     for name, check, overrides, patch, want in cases:
+        total += 1
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
             write_fixture(tmp, **overrides)
@@ -1466,22 +1468,75 @@ def self_test() -> int:
             failures += 1
         print(f"  {'PASS' if ok else 'MISMATCH':<9} {name:<38} 期望 {want} 实际 {got}")
 
+    # Config-schema gate: `load_config` must reject unknown keys. Tested
+    # separately from the `run_check` cases above because it exercises the
+    # loader, not a check function — the same reason the `kit` field survived
+    # unnoticed for so long.
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        write_fixture(tmp)
+        good = copy.deepcopy(FIXTURE_CONFIG)
+        (tmp / CONFIG_NAME).write_text(json.dumps(good), encoding="utf-8")
+        try:
+            load_config(tmp)
+            ok = True
+        except ValueError:
+            ok = False
+        if not ok:
+            failures += 1
+        total += 1
+        print(f"  {'PASS' if ok else 'MISMATCH':<9} {'config_known_keys_ok':<38} 期望 True 实际 {ok}")
+
+        bad = copy.deepcopy(FIXTURE_CONFIG)
+        bad["kit"] = 1  # the exact stale field that survived unread for months
+        (tmp / CONFIG_NAME).write_text(json.dumps(bad), encoding="utf-8")
+        try:
+            load_config(tmp)
+            rejected = False
+        except ValueError:
+            rejected = True
+        if not rejected:
+            failures += 1
+        total += 1
+        print(f"  {'PASS' if rejected else 'MISMATCH':<9} {'config_unknown_key_rejected':<38} 期望 True 实际 {rejected}")
+
     print()
     if failures:
-        print(f"自测失败: {failures}/{len(cases)} 个用例行为不符")
+        print(f"自测失败: {failures}/{total} 个用例行为不符")
         return 1
-    print(f"自测通过: {len(cases)}/{len(cases)} 个用例行为符合预期")
+    print(f"自测通过: {total}/{total} 个用例行为符合预期")
     return 0
 
 
 # ─────────────────────────── 入口 ───────────────────────────
 
 
+KNOWN_CONFIG_KEYS = {
+    "skill_md", "skill_md_max_bytes", "require_lf_pin", "version", "registries",
+    "routing", "counts", "coverage", "deps", "pycompile", "cjk", "palette", "prose",
+}
+
+
 def load_config(root: Path) -> dict:
     path = root / CONFIG_NAME
     if not path.exists():
         raise FileNotFoundError(f"找不到配置 {path}")
-    return json.loads(read_text(path))
+    cfg = json.loads(read_text(path))
+    # Reject unknown keys. A config is a contract, and a key nothing reads is a
+    # claim nothing checks — exactly the disease this kit exists to catch. It
+    # had already happened: `archviz-checks.json` carried a `"kit": 1` field
+    # from the initial commit that no code ever read, no doc ever mentioned,
+    # and nothing ever bumped (KIT_VERSION reached 4 while `kit` sat at 1).
+    # A stale, unread version claim is indistinguishable from a correct one to
+    # every gate in the repo, because no gate looked at it. This one does.
+    unknown = sorted(set(cfg) - KNOWN_CONFIG_KEYS)
+    if unknown:
+        raise ValueError(
+            f"{CONFIG_NAME} 含未知键: {', '.join(unknown)} —— "
+            f"配置是契约，无人读取的键就是无人校验的声明。"
+            f"合法键见 KNOWN_CONFIG_KEYS（{len(KNOWN_CONFIG_KEYS)} 个）。"
+        )
+    return cfg
 
 
 def main(argv: list[str]) -> int:
@@ -1506,7 +1561,7 @@ def main(argv: list[str]) -> int:
 
     try:
         cfg = load_config(root)
-    except (OSError, json.JSONDecodeError) as e:
+    except (OSError, json.JSONDecodeError, ValueError) as e:
         print(f"ERROR: 配置读取失败: {e}", file=sys.stderr)
         return 2
 
