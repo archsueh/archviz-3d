@@ -89,5 +89,11 @@
       "scripts/git-pre-commit.sh"
     ],
     "count_regex": "\\b(?:one|two|three|four|five|six|seven|eight|nine|ten|\\d+)\\s+checks?\\b"
-  }
+  },
+  "shared": [
+    {
+      "path": "references/design-judgment.md",
+      "sha256": "fce284d7137d0ec8499a01f65aa8771aeadf55d07954822255b7695a6a206cdc"
+    }
+  ]
 }

@@ -71,7 +71,7 @@ import re
 import sys
 from pathlib import Path
 
-KIT_VERSION = 6
+KIT_VERSION = 7
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_NAME = "archviz-checks.json"
@@ -1171,6 +1171,56 @@ def check_prose(root: Path, cfg: dict) -> Result:
     return r
 
 
+def check_shared(root: Path, cfg: dict) -> Result:
+    """Cross-repo shared files must match a declared hash.
+
+    The family's convention is "archviz-diagram is the source, the others carry
+    synced copies" (ADR-003). `--self-hash` guards the *kit script* itself, but
+    nothing guarded the **shared content files** — `references/design-judgment.md`
+    is byte-identical across all five repos today (measured 2026-10-09: 1289
+    bytes, sha256 `058460fb0fc4a1db…`), yet the day someone edits it in one repo
+    and not the others, every gate stays green because each copy is internally
+    consistent and nothing compares them.
+
+    So each repo declares the expected sha256 of its shared files here. Editing
+    a shared file means editing its hash in all five configs — a deliberate,
+    visible act, exactly like bumping KIT_VERSION. Drift becomes a red CI, not a
+    silent divergence.
+
+    The hash is over **LF-normalized bytes**, matching `budget`'s rationale: a
+    checkout with `core.autocrlf=true` must not read as a different file.
+    """
+    r = Result("shared")
+    spec = cfg.get("shared")
+    if not spec:
+        r.skip("config 未声明 shared 段")
+        return r
+
+    checked = 0
+    for entry in spec:
+        rel = entry.get("path")
+        want = (entry.get("sha256") or "").strip()
+        if not rel or not want:
+            r.fail(f"shared 条目缺 path 或 sha256: {entry!r}")
+            continue
+        path = root / rel
+        if not path.exists():
+            r.fail(f"shared 文件不存在: {rel}（声明了就要存在）")
+            continue
+        got = hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+        checked += 1
+        if got != want:
+            r.fail(
+                f"{rel} 的 sha256 与声明不符 —— 共享文件漂移了。"
+                f"声明 {want[:16]}…，实际 {got[:16]}…。"
+                "改了共享文件就要同步改五仓配置里的 hash（这是一次刻意、可见的动作）"
+            )
+
+    if not r.failures:
+        r.note(f"{checked} 个跨仓共享文件 hash 与声明一致")
+    return r
+
+
 CHECKS = {
     "version": check_version,
     "budget": check_budget,
@@ -1182,6 +1232,7 @@ CHECKS = {
     "cjk": check_cjk,
     "palette": check_palette,
     "prose": check_prose,
+    "shared": check_shared,
 }
 
 
@@ -1192,6 +1243,12 @@ COVERAGE_SPEC = {
     "indexed_in": "SKILL.md",
     "globs": ["references/*.md"],
 }
+
+SHARED_SPEC = [
+    # engine.py is written by write_fixture as GOOD_ENGINE; its LF-normalized
+    # sha256 is fixed, so the self-test can assert both polarities.
+    {"path": "engine.py", "sha256": "e90d2dab3b45b618ea5ef13a528c64255dc2a391519cd0765ebf44b127358dc2"},
+]
 
 PROSE_SPEC = {
     "files": ["ci.yml"],
@@ -1231,6 +1288,7 @@ FIXTURE_CONFIG = {
     },
     "pycompile": {"globs": ["**/*.py"], "skip_dirs": [".git", "node_modules", "__pycache__"]},
     "prose": PROSE_SPEC,
+    "shared": SHARED_SPEC,
 }
 
 GOOD_REQUIREMENTS = "# demo\nrequests>=2.0\nPillow>=10.0\n"
@@ -1462,6 +1520,16 @@ def self_test() -> int:
         ("prose_exempt_without_reason", "prose",
          {"ci.yml": "# Seven checks\n"},
          {"prose": {**PROSE_SPEC, "exempt": {"ci.yml:1": "   "}}}, False),
+        # shared: cross-repo shared files are guarded by a declared hash. The
+        # anti-polarity cases prove the gate is narrow — a matching hash passes,
+        # an edited file fails, a declared-but-absent file fails.
+        ("shared_ok", "shared", {}, {}, True),
+        ("shared_drift", "shared",
+         {"engine.py": GOOD_ENGINE.replace('"a": 1', '"a": 999')}, {}, False),
+        ("shared_absent_file", "shared", {},
+         {"shared": [{"path": "nowhere.md", "sha256": "a" * 64}]}, False),
+        ("shared_missing_hash", "shared", {},
+         {"shared": [{"path": "engine.py", "sha256": ""}]}, False),
     ]
 
     failures = 0
@@ -1536,6 +1604,7 @@ def self_test() -> int:
 KNOWN_CONFIG_KEYS = {
     "skill_md", "skill_md_max_bytes", "require_lf_pin", "version", "registries",
     "routing", "counts", "coverage", "deps", "pycompile", "cjk", "palette", "prose",
+    "shared",
 }
 
 
@@ -1633,7 +1702,7 @@ def _config_key(check: str) -> str:
     return {"version": "version", "budget": "skill_md_max_bytes", "routing": "routing",
             "counts": "counts", "coverage": "coverage", "deps": "deps",
             "pycompile": "pycompile", "cjk": "cjk", "palette": "palette",
-            "prose": "prose"}[check]
+            "prose": "prose", "shared": "shared"}[check]
 
 
 if __name__ == "__main__":
